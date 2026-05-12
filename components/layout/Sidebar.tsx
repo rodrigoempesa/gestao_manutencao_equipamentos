@@ -13,6 +13,8 @@ import {
   Building2,
   Users,
   BookOpen,
+  Package,
+  Hammer,
   LogOut,
   Menu,
   X,
@@ -31,10 +33,13 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/leituras', label: 'Leituras', icon: Gauge, roles: ['admin_geral', 'admin_local', 'encarregado'] },
   { href: '/manutencoes', label: 'Manutenções', icon: Wrench, roles: ['admin_geral', 'admin_local'] },
   { href: '/equipamentos', label: 'Equipamentos', icon: ClipboardList, roles: ['admin_geral', 'admin_local'] },
+  { href: '/produtos', label: 'Produtos (Estoque)', icon: Package, roles: ['admin_geral', 'admin_local'] },
+  { href: '/servicos', label: 'Serviços', icon: Hammer, roles: ['admin_geral', 'admin_local'] },
   { href: '/planos', label: 'Planos de Manutenção', icon: BookOpen, roles: ['admin_geral'] },
   { href: '/filiais', label: 'Filiais', icon: Building2, roles: ['admin_geral'] },
   { href: '/usuarios', label: 'Usuários', icon: Users, roles: ['admin_geral', 'admin_local'] },
 ]
+
 
 interface SidebarProps {
   profile: Profile

@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Equipment, Reading } from '@/lib/types'
-import { formatReading, formatDate } from '@/lib/types'
-import { todayISO, trackingLabel } from '@/lib/utils'
+import { formatReading } from '@/lib/types'
+import { todayISO, trackingLabel, formatDate } from '@/lib/utils'
 import { Gauge, Save, Check, AlertTriangle, History } from 'lucide-react'
 
 interface EquipmentRow {
