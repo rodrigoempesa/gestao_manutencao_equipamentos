@@ -15,6 +15,7 @@ import {
   BookOpen,
   Package,
   Hammer,
+  ShoppingCart,
   LogOut,
   Menu,
   X,
@@ -36,6 +37,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/produtos', label: 'Produtos (Estoque)', icon: Package, roles: ['admin_geral', 'admin_local'] },
   { href: '/servicos', label: 'Serviços', icon: Hammer, roles: ['admin_geral', 'admin_local'] },
   { href: '/planos', label: 'Planos de Manutenção', icon: BookOpen, roles: ['admin_geral'] },
+  { href: '/solicitacoes', label: 'Solicitações de Compra', icon: ShoppingCart, roles: ['admin_geral', 'admin_local'] },
   { href: '/filiais', label: 'Filiais', icon: Building2, roles: ['admin_geral'] },
   { href: '/usuarios', label: 'Usuários', icon: Users, roles: ['admin_geral', 'admin_local'] },
 ]

@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Brand, EquipmentModel, MaintenancePlan, MaintenancePlanItem } from '@/lib/types'
 import { trackingLabel } from '@/lib/utils'
-import { BookOpen, Plus, Pencil, Trash2, X, ChevronDown, ChevronRight, Package, Hammer } from 'lucide-react'
+import { BookOpen, Plus, Pencil, Trash2, X, ChevronDown, ChevronRight, Package, Hammer, ShoppingCart } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 interface Product { id: string; code: string; name: string; unit: string; unit_price: number }
 interface Service { id: string; name: string; unit: string; unit_price: number }
@@ -23,6 +24,7 @@ function formatBRL(v: number) {
 
 export default function PlanosPage() {
   const supabase = createClient()
+  const router = useRouter()
   const [brands, setBrands] = useState<Brand[]>([])
   const [models, setModels] = useState<EquipmentModel[]>([])
   const [plans, setPlans] = useState<MaintenancePlan[]>([])
@@ -269,6 +271,13 @@ export default function PlanosPage() {
                             <button className="btn-secondary py-1 px-2 text-red-500" onClick={() => deletePlan(plan.id)}><Trash2 className="w-3 h-3" /></button>
                             <button className="btn-secondary py-1 px-2 text-blue-600" onClick={() => { setItemForm({ id: '', plan_id: plan.id, product_id: '', quantity: '1', service_id: '', description: '', order_index: String(items.length) }); setError(''); setShowItemModal(true) }}>
                               <Plus className="w-3 h-3" /> Item
+                            </button>
+                            <button
+                              className="btn-secondary py-1 px-2 text-green-600"
+                              title="Solicitar compra dos materiais deste plano"
+                              onClick={() => router.push(`/solicitacoes?plan=${plan.id}`)}
+                            >
+                              <ShoppingCart className="w-3 h-3" />
                             </button>
                           </div>
                         </div>
