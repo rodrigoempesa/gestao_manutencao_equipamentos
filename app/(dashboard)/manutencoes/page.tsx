@@ -9,7 +9,7 @@ import { Wrench, Plus, X, Filter, ChevronDown, ChevronRight, Clock, Package, Dol
 
 interface Product { id: string; code: string; name: string; unit: string; unit_price: number }
 interface Service { id: string; name: string; unit: string; unit_price: number }
-interface PlanItem { id: string; description: string; product_id: string | null; quantity: number; products?: Product }
+interface PlanItem { id: string; description: string; product_id: string | null; quantity: number; service_id: string | null; products?: Product; services?: Service }
 
 interface RecordItem {
   _key: string
@@ -113,7 +113,7 @@ export default function ManutencoesPage() {
       rQuery,
       eQuery,
       supabase.from('maintenance_plans').select('*, equipment_models(tracking_type)').order('interval_value'),
-      supabase.from('maintenance_plan_items').select('*, products(id,code,name,unit,unit_price)').order('order_index'),
+      supabase.from('maintenance_plan_items').select('*, products(id,code,name,unit,unit_price), services(id,name,unit,unit_price)').order('order_index'),
       supabase.from('products').select('id,code,name,unit,unit_price').eq('active', true).order('name'),
       supabase.from('services').select('id,name,unit,unit_price').eq('active', true).order('name'),
     ])
@@ -151,7 +151,7 @@ export default function ManutencoesPage() {
       const prefilledItems: RecordItem[] = planItems.map(pi => ({
         _key: Math.random().toString(36).slice(2),
         product_id: pi.product_id ?? '',
-        service_id: '',
+        service_id: pi.service_id ?? '',
         plan_item_id: pi.id,
         description: pi.description,
         quantity: String(pi.quantity),

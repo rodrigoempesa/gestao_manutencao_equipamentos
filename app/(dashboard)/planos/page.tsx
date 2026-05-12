@@ -4,14 +4,17 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Brand, EquipmentModel, MaintenancePlan, MaintenancePlanItem } from '@/lib/types'
 import { trackingLabel } from '@/lib/utils'
-import { BookOpen, Plus, Pencil, Trash2, X, ChevronDown, ChevronRight, Package } from 'lucide-react'
+import { BookOpen, Plus, Pencil, Trash2, X, ChevronDown, ChevronRight, Package, Hammer } from 'lucide-react'
 
 interface Product { id: string; code: string; name: string; unit: string; unit_price: number }
+interface Service { id: string; name: string; unit: string; unit_price: number }
 
-interface PlanItemWithProduct extends MaintenancePlanItem {
+interface PlanItem extends MaintenancePlanItem {
   product_id: string | null
+  service_id: string | null
   quantity: number
   products?: Product
+  services?: Service
 }
 
 function formatBRL(v: number) {
@@ -23,8 +26,9 @@ export default function PlanosPage() {
   const [brands, setBrands] = useState<Brand[]>([])
   const [models, setModels] = useState<EquipmentModel[]>([])
   const [plans, setPlans] = useState<MaintenancePlan[]>([])
-  const [planItems, setPlanItems] = useState<Record<string, PlanItemWithProduct[]>>({})
+  const [planItems, setPlanItems] = useState<Record<string, PlanItem[]>>({})
   const [products, setProducts] = useState<Product[]>([])
+  const [services, setServices] = useState<Service[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedModel, setExpandedModel] = useState<string | null>(null)
   const [expandedPlan, setExpandedPlan] = useState<string | null>(null)
@@ -39,26 +43,33 @@ export default function PlanosPage() {
   const [planForm, setPlanForm] = useState({ id: '', model_id: '', interval_value: '', name: '', description: '' })
 
   const [showItemModal, setShowItemModal] = useState(false)
-  const [itemForm, setItemForm] = useState({ id: '', plan_id: '', description: '', order_index: '0', product_id: '', quantity: '1' })
+  const [itemForm, setItemForm] = useState({
+    id: '', plan_id: '',
+    product_id: '', quantity: '1',
+    service_id: '',
+    description: '', order_index: '0',
+  })
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   const loadData = useCallback(async () => {
     setLoading(true)
-    const [{ data: b }, { data: m }, { data: p }, { data: items }, { data: prods }] = await Promise.all([
+    const [{ data: b }, { data: m }, { data: p }, { data: items }, { data: prods }, { data: svcs }] = await Promise.all([
       supabase.from('brands').select('*').order('name'),
       supabase.from('equipment_models').select('*, brands(*)').order('name'),
       supabase.from('maintenance_plans').select('*').order('interval_value'),
-      supabase.from('maintenance_plan_items').select('*, products(id, code, name, unit, unit_price)').order('order_index'),
-      supabase.from('products').select('id, code, name, unit, unit_price').eq('active', true).order('name'),
+      supabase.from('maintenance_plan_items').select('*, products(id,code,name,unit,unit_price), services(id,name,unit,unit_price)').order('order_index'),
+      supabase.from('products').select('id,code,name,unit,unit_price').eq('active', true).order('name'),
+      supabase.from('services').select('id,name,unit,unit_price').eq('active', true).order('name'),
     ])
     setBrands((b as Brand[]) ?? [])
     setModels((m as EquipmentModel[]) ?? [])
     setPlans((p as MaintenancePlan[]) ?? [])
     setProducts((prods as Product[]) ?? [])
-    const itemMap: Record<string, PlanItemWithProduct[]> = {}
-    ;((items as PlanItemWithProduct[]) ?? []).forEach(i => {
+    setServices((svcs as Service[]) ?? [])
+    const itemMap: Record<string, PlanItem[]> = {}
+    ;((items as PlanItem[]) ?? []).forEach(i => {
       if (!itemMap[i.plan_id]) itemMap[i.plan_id] = []
       itemMap[i.plan_id].push(i)
     })
@@ -68,6 +79,7 @@ export default function PlanosPage() {
 
   useEffect(() => { loadData() }, [loadData])
 
+  // --- CRUD helpers ---
   async function saveBrand(e: React.FormEvent) {
     e.preventDefault(); setSaving(true); setError('')
     const { error: err } = brandForm.id
@@ -126,12 +138,16 @@ export default function PlanosPage() {
   async function saveItem(e: React.FormEvent) {
     e.preventDefault(); setSaving(true); setError('')
     const selectedProduct = products.find(p => p.id === itemForm.product_id)
+    const selectedService = services.find(s => s.id === itemForm.service_id)
+    // auto-fill description if empty
+    const autoDesc = [selectedProduct?.name, selectedService?.name].filter(Boolean).join(' + ')
     const payload = {
       plan_id: itemForm.plan_id,
-      description: itemForm.description.trim() || selectedProduct?.name || '',
+      description: itemForm.description.trim() || autoDesc || '',
       order_index: parseInt(itemForm.order_index) || 0,
       product_id: itemForm.product_id || null,
       quantity: parseFloat(itemForm.quantity) || 1,
+      service_id: itemForm.service_id || null,
     }
     const { error: err } = itemForm.id
       ? await supabase.from('maintenance_plan_items').update(payload).eq('id', itemForm.id)
@@ -146,11 +162,15 @@ export default function PlanosPage() {
     loadData()
   }
 
+  // Item cost = product cost + service cost (both per unit, service is per "execução")
+  function itemCost(item: PlanItem) {
+    const matCost = (item.products?.unit_price ?? 0) * item.quantity
+    const svcCost = item.services?.unit_price ?? 0
+    return matCost + svcCost
+  }
+
   function planCost(planId: string) {
-    return (planItems[planId] ?? []).reduce((sum, item) => {
-      const price = item.products?.unit_price ?? 0
-      return sum + price * item.quantity
-    }, 0)
+    return (planItems[planId] ?? []).reduce((sum, item) => sum + itemCost(item), 0)
   }
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Carregando...</div>
@@ -162,7 +182,7 @@ export default function PlanosPage() {
           <BookOpen className="w-6 h-6 text-blue-600" />
           Planos de Manutenção
         </h1>
-        <p className="text-gray-500 text-sm mt-1">Marcas, modelos e planos com produtos e custos previstos</p>
+        <p className="text-gray-500 text-sm mt-1">Cada item define produto + quantidade + serviço associado</p>
       </div>
 
       {/* Brands */}
@@ -247,7 +267,7 @@ export default function PlanosPage() {
                           <div className="flex gap-2" onClick={e => e.stopPropagation()}>
                             <button className="btn-secondary py-1 px-2" onClick={() => { setPlanForm({ id: plan.id, model_id: plan.model_id, interval_value: String(plan.interval_value), name: plan.name, description: plan.description ?? '' }); setError(''); setShowPlanModal(true) }}><Pencil className="w-3 h-3" /></button>
                             <button className="btn-secondary py-1 px-2 text-red-500" onClick={() => deletePlan(plan.id)}><Trash2 className="w-3 h-3" /></button>
-                            <button className="btn-secondary py-1 px-2 text-blue-600" onClick={() => { setItemForm({ id: '', plan_id: plan.id, description: '', order_index: String(items.length), product_id: '', quantity: '1' }); setError(''); setShowItemModal(true) }}>
+                            <button className="btn-secondary py-1 px-2 text-blue-600" onClick={() => { setItemForm({ id: '', plan_id: plan.id, product_id: '', quantity: '1', service_id: '', description: '', order_index: String(items.length) }); setError(''); setShowItemModal(true) }}>
                               <Plus className="w-3 h-3" /> Item
                             </button>
                           </div>
@@ -264,10 +284,14 @@ export default function PlanosPage() {
                                   <tr className="border-b border-gray-100">
                                     <th className="text-left pb-2 text-xs font-semibold text-gray-500 w-6">#</th>
                                     <th className="text-left pb-2 text-xs font-semibold text-gray-500">Descrição</th>
-                                    <th className="text-left pb-2 text-xs font-semibold text-gray-500">Produto</th>
+                                    <th className="text-left pb-2 text-xs font-semibold text-gray-500">
+                                      <span className="flex items-center gap-1"><Package className="w-3 h-3" /> Produto</span>
+                                    </th>
                                     <th className="text-right pb-2 text-xs font-semibold text-gray-500">Qtd</th>
-                                    <th className="text-right pb-2 text-xs font-semibold text-gray-500">Preço Unit.</th>
-                                    <th className="text-right pb-2 text-xs font-semibold text-gray-500">Subtotal</th>
+                                    <th className="text-left pb-2 text-xs font-semibold text-gray-500">
+                                      <span className="flex items-center gap-1"><Hammer className="w-3 h-3" /> Serviço</span>
+                                    </th>
+                                    <th className="text-right pb-2 text-xs font-semibold text-gray-500">Custo prev.</th>
                                     <th className="w-16"></th>
                                   </tr>
                                 </thead>
@@ -275,20 +299,31 @@ export default function PlanosPage() {
                                   {items.map((item, idx) => (
                                     <tr key={item.id} className="group">
                                       <td className="py-2 text-gray-400">{idx + 1}</td>
-                                      <td className="py-2">{item.description}</td>
+                                      <td className="py-2 max-w-[160px]">
+                                        <p className="truncate">{item.description}</p>
+                                      </td>
                                       <td className="py-2">
                                         {item.products ? (
-                                          <span className="flex items-center gap-1 text-xs text-blue-600">
-                                            <Package className="w-3 h-3" /> {item.products.code}
-                                          </span>
-                                        ) : <span className="text-gray-300">-</span>}
+                                          <div>
+                                            <p className="text-xs font-medium text-blue-700">{item.products.code}</p>
+                                            <p className="text-xs text-gray-400">{item.products.name}</p>
+                                          </div>
+                                        ) : <span className="text-gray-300 text-xs">—</span>}
                                       </td>
-                                      <td className="py-2 text-right font-mono">{item.quantity} {item.products?.unit ?? ''}</td>
-                                      <td className="py-2 text-right font-mono text-gray-500">{item.products ? formatBRL(item.products.unit_price) : '-'}</td>
-                                      <td className="py-2 text-right font-mono font-semibold">{item.products ? formatBRL(item.products.unit_price * item.quantity) : '-'}</td>
+                                      <td className="py-2 text-right font-mono text-sm">
+                                        {item.products ? `${item.quantity} ${item.products.unit}` : '—'}
+                                      </td>
+                                      <td className="py-2">
+                                        {item.services ? (
+                                          <span className="text-xs text-purple-700 font-medium">{item.services.name}</span>
+                                        ) : <span className="text-gray-300 text-xs">—</span>}
+                                      </td>
+                                      <td className="py-2 text-right font-mono font-semibold text-green-700">
+                                        {itemCost(item) > 0 ? formatBRL(itemCost(item)) : '—'}
+                                      </td>
                                       <td className="py-2">
                                         <div className="opacity-0 group-hover:opacity-100 flex gap-1 justify-end">
-                                          <button className="text-gray-400 hover:text-blue-600" onClick={() => { setItemForm({ id: item.id, plan_id: item.plan_id, description: item.description, order_index: String(item.order_index), product_id: item.product_id ?? '', quantity: String(item.quantity) }); setError(''); setShowItemModal(true) }}><Pencil className="w-3.5 h-3.5" /></button>
+                                          <button className="text-gray-400 hover:text-blue-600" onClick={() => { setItemForm({ id: item.id, plan_id: item.plan_id, product_id: item.product_id ?? '', quantity: String(item.quantity), service_id: item.service_id ?? '', description: item.description, order_index: String(item.order_index) }); setError(''); setShowItemModal(true) }}><Pencil className="w-3.5 h-3.5" /></button>
                                           <button className="text-gray-400 hover:text-red-600" onClick={() => deleteItem(item.id)}><Trash2 className="w-3.5 h-3.5" /></button>
                                         </div>
                                       </td>
@@ -298,7 +333,7 @@ export default function PlanosPage() {
                                 {cost > 0 && (
                                   <tfoot>
                                     <tr className="border-t border-gray-200">
-                                      <td colSpan={5} className="pt-2 text-right text-xs font-semibold text-gray-600">Custo total previsto em materiais:</td>
+                                      <td colSpan={5} className="pt-2 text-right text-xs font-semibold text-gray-600">Custo total previsto:</td>
                                       <td className="pt-2 text-right font-bold text-green-700 font-mono">{formatBRL(cost)}</td>
                                       <td />
                                     </tr>
@@ -409,65 +444,138 @@ export default function PlanosPage() {
         </div>
       )}
 
-      {/* Item Modal */}
+      {/* Item Modal — produto + quantidade + serviço juntos */}
       {showItemModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
             <div className="flex items-center justify-between px-6 py-4 border-b">
               <h3 className="font-semibold">{itemForm.id ? 'Editar' : 'Novo'} Item do Plano</h3>
               <button onClick={() => setShowItemModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
             </div>
             <form onSubmit={saveItem} className="px-6 py-4 space-y-4">
+
+              {/* Produto */}
+              <div className="border border-blue-100 rounded-xl p-4 space-y-3 bg-blue-50">
+                <p className="text-sm font-semibold text-blue-800 flex items-center gap-1">
+                  <Package className="w-4 h-4" /> Produto utilizado
+                </p>
+                <div>
+                  <label className="label">Produto</label>
+                  <select
+                    className="input"
+                    value={itemForm.product_id}
+                    onChange={e => {
+                      const prod = products.find(p => p.id === e.target.value)
+                      setItemForm(f => ({
+                        ...f,
+                        product_id: e.target.value,
+                        description: f.description || prod?.name || '',
+                      }))
+                    }}
+                  >
+                    <option value="">Sem produto</option>
+                    {products.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.code} – {p.name} ({p.unit}) — {formatBRL(p.unit_price)}/{p.unit}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {itemForm.product_id && (
+                  <div>
+                    <label className="label">Quantidade</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number" step="0.001" min={0.001}
+                        className="input font-mono w-32"
+                        value={itemForm.quantity}
+                        onChange={e => setItemForm(f => ({ ...f, quantity: e.target.value }))}
+                      />
+                      <span className="text-sm text-gray-500">
+                        {products.find(p => p.id === itemForm.product_id)?.unit}
+                      </span>
+                      {(() => {
+                        const prod = products.find(p => p.id === itemForm.product_id)
+                        const qty = parseFloat(itemForm.quantity) || 0
+                        const subtotal = (prod?.unit_price ?? 0) * qty
+                        return subtotal > 0
+                          ? <span className="text-xs text-green-700 font-semibold ml-2">= {formatBRL(subtotal)}</span>
+                          : null
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Serviço */}
+              <div className="border border-purple-100 rounded-xl p-4 space-y-3 bg-purple-50">
+                <p className="text-sm font-semibold text-purple-800 flex items-center gap-1">
+                  <Hammer className="w-4 h-4" /> Serviço associado
+                </p>
+                <div>
+                  <label className="label">Serviço</label>
+                  <select
+                    className="input"
+                    value={itemForm.service_id}
+                    onChange={e => {
+                      const svc = services.find(s => s.id === e.target.value)
+                      setItemForm(f => ({
+                        ...f,
+                        service_id: e.target.value,
+                        description: f.description || svc?.name || '',
+                      }))
+                    }}
+                  >
+                    <option value="">Sem serviço vinculado</option>
+                    {services.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} — {formatBRL(s.unit_price)}/{s.unit}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Custo previsto do item */}
+              {(itemForm.product_id || itemForm.service_id) && (() => {
+                const prod = products.find(p => p.id === itemForm.product_id)
+                const svc = services.find(s => s.id === itemForm.service_id)
+                const matCost = (prod?.unit_price ?? 0) * (parseFloat(itemForm.quantity) || 0)
+                const svcCost = svc?.unit_price ?? 0
+                const total = matCost + svcCost
+                return total > 0 ? (
+                  <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm">
+                    <div className="flex justify-between text-gray-600">
+                      <span>Material: {formatBRL(matCost)}</span>
+                      <span>Serviço: {formatBRL(svcCost)}</span>
+                      <span className="font-bold text-green-700">Total: {formatBRL(total)}</span>
+                    </div>
+                  </div>
+                ) : null
+              })()}
+
+              {/* Descrição */}
               <div>
-                <label className="label">Produto (opcional)</label>
-                <select
+                <label className="label">Descrição do item *</label>
+                <input
                   className="input"
-                  value={itemForm.product_id}
-                  onChange={e => {
-                    const prod = products.find(p => p.id === e.target.value)
-                    setItemForm(f => ({
-                      ...f,
-                      product_id: e.target.value,
-                      description: f.description || prod?.name || '',
-                    }))
-                  }}
-                >
-                  <option value="">Sem produto vinculado</option>
-                  {products.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.code} – {p.name} ({p.unit}) — {p.unit_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                    </option>
-                  ))}
-                </select>
-                {itemForm.product_id && (() => {
-                  const prod = products.find(p => p.id === itemForm.product_id)
-                  const qty = parseFloat(itemForm.quantity) || 0
-                  const subtotal = (prod?.unit_price ?? 0) * qty
-                  return (
-                    <p className="text-xs text-green-700 mt-1">
-                      Custo previsto: {formatBRL(subtotal)}
-                    </p>
-                  )
-                })()}
+                  value={itemForm.description}
+                  onChange={e => setItemForm(f => ({ ...f, description: e.target.value }))}
+                  required
+                  placeholder="Ex: Troca de óleo do motor"
+                />
+                <p className="text-xs text-gray-400 mt-1">Preenchida automaticamente ao selecionar produto/serviço</p>
               </div>
+
               <div>
-                <label className="label">Descrição do Item *</label>
-                <textarea className="input" rows={2} value={itemForm.description} onChange={e => setItemForm(f => ({ ...f, description: e.target.value }))} required placeholder="Ex: Troca de óleo do motor" />
+                <label className="label">Ordem</label>
+                <input type="number" min={0} className="input w-24" value={itemForm.order_index} onChange={e => setItemForm(f => ({ ...f, order_index: e.target.value }))} />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Quantidade</label>
-                  <input type="number" step="0.001" min={0.001} className="input font-mono" value={itemForm.quantity} onChange={e => setItemForm(f => ({ ...f, quantity: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="label">Ordem</label>
-                  <input type="number" min={0} className="input" value={itemForm.order_index} onChange={e => setItemForm(f => ({ ...f, order_index: e.target.value }))} />
-                </div>
-              </div>
+
               {error && <p className="text-sm text-red-600">{error}</p>}
               <div className="flex gap-3 justify-end">
                 <button type="button" className="btn-secondary" onClick={() => setShowItemModal(false)}>Cancelar</button>
-                <button type="submit" className="btn-primary" disabled={saving}>{saving ? '...' : 'Salvar'}</button>
+                <button type="submit" className="btn-primary" disabled={saving}>{saving ? '...' : 'Salvar Item'}</button>
               </div>
             </form>
           </div>
