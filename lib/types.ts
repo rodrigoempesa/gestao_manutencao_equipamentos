@@ -122,6 +122,7 @@ export interface EquipmentStatus {
   last_maintenance_plan_name: string | null
   next_maintenance_interval: number | null
   next_maintenance_plan_name: string | null
+  accumulated_since_maintenance: number | null
 }
 
 export type MaintenanceStatus = 'overdue' | 'warning' | 'ok' | 'no_data'
