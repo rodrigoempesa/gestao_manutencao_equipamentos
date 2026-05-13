@@ -4,7 +4,7 @@
 -- ============================================================
 
 -- DROP necessário pois CREATE OR REPLACE não permite inserir coluna no meio da lista
-drop view if exists public.vw_equipment_status;
+drop view if exists public.vw_equipment_status cascade;
 
 create view public.vw_equipment_status
   with (security_invoker = true)
