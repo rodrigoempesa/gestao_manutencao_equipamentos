@@ -16,6 +16,48 @@ interface FormState {
 
 const emptyForm = (): FormState => ({ id: '', name: '', city: '', state: 'SP', active: true })
 
+function BranchCard({
+  b,
+  onEdit,
+  onToggle,
+}: {
+  b: Branch
+  onEdit: (b: Branch) => void
+  onToggle: (b: Branch) => void
+}) {
+  return (
+    <div className={`card flex items-start gap-4 ${!b.active ? 'opacity-70' : ''}`}>
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${b.active ? 'bg-blue-100' : 'bg-gray-100'}`}>
+        <MapPin className={`w-5 h-5 ${b.active ? 'text-blue-600' : 'text-gray-400'}`} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="font-semibold text-gray-900 truncate">{b.name}</h3>
+          {b.active
+            ? <span className="badge-green">Ativa</span>
+            : <span className="badge-gray">Inativa</span>
+          }
+        </div>
+        <p className="text-sm text-gray-500 mt-0.5">{b.city} – {b.state}</p>
+        <div className="flex gap-2 mt-3">
+          <button className="btn-secondary py-1 px-2 text-xs" onClick={() => onEdit(b)}>
+            <Pencil className="w-3.5 h-3.5" /> Editar
+          </button>
+          <button
+            className={`btn-secondary py-1 px-2 text-xs ${b.active ? 'text-red-500' : 'text-green-600'}`}
+            onClick={() => onToggle(b)}
+          >
+            {b.active
+              ? <><ToggleRight className="w-3.5 h-3.5" /> Desativar</>
+              : <><ToggleLeft className="w-3.5 h-3.5" /> Ativar</>
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function FiliaisPage() {
   const supabase = createClient()
   const [branches, setBranches] = useState<Branch[]>([])
@@ -67,6 +109,9 @@ export default function FiliaisPage() {
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Carregando...</div>
 
+  const activeBranches = branches.filter(b => b.active)
+  const inactiveBranches = branches.filter(b => !b.active)
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -75,51 +120,43 @@ export default function FiliaisPage() {
             <Building2 className="w-6 h-6 text-blue-600" />
             Filiais
           </h1>
-          <p className="text-gray-500 text-sm mt-1">{branches.length} filiais cadastradas</p>
+          <p className="text-gray-500 text-sm mt-1">
+            {activeBranches.length} ativa{activeBranches.length !== 1 ? 's' : ''}
+            {inactiveBranches.length > 0 ? ` · ${inactiveBranches.length} inativa${inactiveBranches.length !== 1 ? 's' : ''}` : ''}
+          </p>
         </div>
         <button className="btn-primary" onClick={openCreate}>
           <Plus className="w-4 h-4" /> Nova Filial
         </button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {branches.length === 0 && (
-          <div className="col-span-full card text-center text-gray-400 py-16">
-            Nenhuma filial cadastrada. Clique em "Nova Filial" para começar.
+      {branches.length === 0 && (
+        <div className="card text-center text-gray-400 py-16">
+          Nenhuma filial cadastrada. Clique em "Nova Filial" para começar.
+        </div>
+      )}
+
+      {activeBranches.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Ativas</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {activeBranches.map(b => (
+              <BranchCard key={b.id} b={b} onEdit={openEdit} onToggle={toggleActive} />
+            ))}
           </div>
-        )}
-        {branches.map(b => (
-          <div key={b.id} className={`card flex items-start gap-4 ${!b.active ? 'opacity-60' : ''}`}>
-            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
-              <MapPin className="w-5 h-5 text-blue-600" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="font-semibold text-gray-900 truncate">{b.name}</h3>
-                {b.active
-                  ? <span className="badge-green">Ativa</span>
-                  : <span className="badge-gray">Inativa</span>
-                }
-              </div>
-              <p className="text-sm text-gray-500 mt-0.5">{b.city} – {b.state}</p>
-              <div className="flex gap-2 mt-3">
-                <button className="btn-secondary py-1 px-2 text-xs" onClick={() => openEdit(b)}>
-                  <Pencil className="w-3.5 h-3.5" /> Editar
-                </button>
-                <button
-                  className={`btn-secondary py-1 px-2 text-xs ${b.active ? 'text-red-500' : 'text-green-600'}`}
-                  onClick={() => toggleActive(b)}
-                >
-                  {b.active
-                    ? <><ToggleRight className="w-3.5 h-3.5" /> Desativar</>
-                    : <><ToggleLeft className="w-3.5 h-3.5" /> Ativar</>
-                  }
-                </button>
-              </div>
-            </div>
+        </div>
+      )}
+
+      {inactiveBranches.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wide">Inativas</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {inactiveBranches.map(b => (
+              <BranchCard key={b.id} b={b} onEdit={openEdit} onToggle={toggleActive} />
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
 
       {/* Modal */}
       {showForm && (
