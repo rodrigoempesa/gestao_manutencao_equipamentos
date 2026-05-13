@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Equipment, MaintenancePlan } from '@/lib/types'
 import { formatReading } from '@/lib/types'
 import { formatDate, todayISO } from '@/lib/utils'
-import { Wrench, Plus, X, Filter, ChevronDown, ChevronRight, Clock, Package, DollarSign, AlertCircle } from 'lucide-react'
+import { Wrench, Plus, X, Filter, ChevronDown, ChevronRight, Clock, Package, DollarSign, AlertCircle, ShoppingCart, Info } from 'lucide-react'
 
 interface Product { id: string; code: string; name: string; unit: string; unit_price: number }
 interface Service { id: string; name: string; unit: string; unit_price: number }
@@ -81,6 +81,10 @@ export default function ManutencoesPage() {
   const [filteredPlans, setFilteredPlans] = useState<MaintenancePlan[]>([])
   const [planItemsMap, setPlanItemsMap] = useState<Record<string, PlanItem[]>>({})
   const [loading, setLoading] = useState(true)
+  const [purchaseReqMap, setPurchaseReqMap] = useState<Record<string, any>>({})
+  const [linkedPurchaseReq, setLinkedPurchaseReq] = useState<any | null>(null)
+  const [materialDiscount, setMaterialDiscount] = useState(0)
+
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(emptyForm())
   const [items, setItems] = useState<RecordItem[]>([newItem()])
@@ -109,13 +113,17 @@ export default function ManutencoesPage() {
       eQuery = eQuery.eq('branch_id', prof.branch_id)
     }
 
-    const [{ data: recs }, { data: equips }, { data: allPlans }, { data: allPlanItems }, { data: prods }, { data: svcs }] = await Promise.all([
+    const [{ data: recs }, { data: equips }, { data: allPlans }, { data: allPlanItems }, { data: prods }, { data: svcs }, { data: purchaseReqs }] = await Promise.all([
       rQuery,
       eQuery,
       supabase.from('maintenance_plans').select('*, equipment_models(tracking_type)').order('interval_value'),
       supabase.from('maintenance_plan_items').select('*, products(id,code,name,unit,unit_price), services(id,name,unit,unit_price)').order('order_index'),
       supabase.from('products').select('id,code,name,unit,unit_price').eq('active', true).order('name'),
       supabase.from('services').select('id,name,unit,unit_price').eq('active', true).order('name'),
+      supabase.from('purchase_requests')
+        .select('*, purchase_request_items(*, products(id,code,name,unit,unit_price))')
+        .eq('status', 'concluido')
+        .order('created_at', { ascending: false }),
     ])
 
     setRecords((recs as any[]) ?? [])
@@ -130,6 +138,14 @@ export default function ManutencoesPage() {
       piMap[i.plan_id].push(i)
     })
     setPlanItemsMap(piMap)
+
+    // Index purchase requests by "equipmentId|planId" — most recent first
+    const prMap: Record<string, any> = {}
+    ;((purchaseReqs as any[]) ?? []).forEach(pr => {
+      const key = `${pr.equipment_id}|${pr.plan_id}`
+      if (!prMap[key]) prMap[key] = pr
+    })
+    setPurchaseReqMap(prMap)
     setLoading(false)
   }, [supabase])
 
@@ -141,26 +157,62 @@ export default function ManutencoesPage() {
     setFilteredPlans(modelPlans)
     setForm(f => ({ ...f, equipment_id: equipId, plan_id: '' }))
     setItems([newItem()])
+    setLinkedPurchaseReq(null)
+    setMaterialDiscount(0)
   }
 
   function handlePlanChange(planId: string) {
     setForm(f => ({ ...f, plan_id: planId }))
+    setLinkedPurchaseReq(null)
+    setMaterialDiscount(0)
     if (!planId) { setItems([newItem()]); return }
-    const planItems = planItemsMap[planId] ?? []
-    if (planItems.length > 0) {
-      const prefilledItems: RecordItem[] = planItems.map(pi => ({
-        _key: Math.random().toString(36).slice(2),
-        product_id: pi.product_id ?? '',
-        service_id: pi.service_id ?? '',
-        plan_item_id: pi.id,
-        description: pi.description,
-        quantity: String(pi.quantity),
-        unit: pi.products?.unit ?? 'un',
-        unit_price: String(pi.products?.unit_price ?? 0),
-      }))
+
+    // 1. Check for a concluded purchase request for this equipment + plan
+    const currentEquipId = form.equipment_id
+    const prKey = `${currentEquipId}|${planId}`
+    const pr = purchaseReqMap[prKey]
+
+    if (pr && pr.purchase_request_items?.length > 0) {
+      // Pre-fill from purchase request items
+      const prItems = pr.purchase_request_items as any[]
+      const prefilledItems: RecordItem[] = prItems
+        .filter(pi => pi.products)
+        .map(pi => ({
+          _key: Math.random().toString(36).slice(2),
+          product_id: pi.product_id ?? '',
+          service_id: '',
+          plan_item_id: '',
+          description: pi.description || pi.products?.name || '',
+          quantity: String(pi.quantity),
+          unit: pi.unit || pi.products?.unit || 'un',
+          unit_price: String(pi.unit_price ?? pi.products?.unit_price ?? 0),
+        }))
       setItems([...prefilledItems, newItem()])
+      setLinkedPurchaseReq(pr)
+
+      // Calculate discount = final_amount - sum(estimated item costs)
+      if (pr.final_amount != null) {
+        const estimatedTotal = prItems.reduce((s: number, i: any) => s + i.quantity * (i.unit_price ?? 0), 0)
+        setMaterialDiscount(pr.final_amount - estimatedTotal)
+      }
     } else {
-      setItems([newItem()])
+      // 2. Fall back to plan items
+      const planItems = planItemsMap[planId] ?? []
+      if (planItems.length > 0) {
+        const prefilledItems: RecordItem[] = planItems.map(pi => ({
+          _key: Math.random().toString(36).slice(2),
+          product_id: pi.product_id ?? '',
+          service_id: pi.service_id ?? '',
+          plan_item_id: pi.id,
+          description: pi.description,
+          quantity: String(pi.quantity),
+          unit: pi.products?.unit ?? 'un',
+          unit_price: String(pi.products?.unit_price ?? 0),
+        }))
+        setItems([...prefilledItems, newItem()])
+      } else {
+        setItems([newItem()])
+      }
     }
   }
 
@@ -180,8 +232,12 @@ export default function ManutencoesPage() {
     return items.reduce((sum, i) => sum + (parseFloat(i.quantity) || 0) * (parseFloat(i.unit_price) || 0), 0)
   }
 
+  function materialTotal() {
+    return itemsTotal() + materialDiscount
+  }
+
   function grandTotal() {
-    return itemsTotal() + (parseFloat(form.labor_cost) || 0)
+    return materialTotal() + (parseFloat(form.labor_cost) || 0)
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -449,12 +505,36 @@ export default function ManutencoesPage() {
                       <option value="">Sem plano vinculado</option>
                       {filteredPlans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
-                    {form.plan_id && (planItemsMap[form.plan_id] ?? []).length > 0 && (
-                      <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
-                        <Package className="w-3 h-3" />
-                        Itens do plano pré-carregados. Adicione ou remova itens abaixo.
+                  </div>
+                )}
+
+                {/* Source banner */}
+                {form.plan_id && linkedPurchaseReq && (
+                  <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-800">
+                    <ShoppingCart className="w-4 h-4 flex-shrink-0 mt-0.5 text-emerald-600" />
+                    <div>
+                      <p className="font-semibold">Dados puxados da Solicitação de Compra</p>
+                      <p className="text-xs mt-0.5 text-emerald-700">
+                        {linkedPurchaseReq.final_amount != null
+                          ? <>Valor final da compra: <strong>{formatBRL(linkedPurchaseReq.final_amount)}</strong>
+                            {materialDiscount !== 0 && (
+                              <> · {materialDiscount < 0
+                                ? `Desconto: ${formatBRL(Math.abs(materialDiscount))}`
+                                : `Acréscimo: ${formatBRL(materialDiscount)}`}
+                              </>
+                            )}
+                          </>
+                          : 'Valor final não registrado — usando preços estimados dos itens'
+                        }
                       </p>
-                    )}
+                    </div>
+                  </div>
+                )}
+
+                {form.plan_id && !linkedPurchaseReq && (planItemsMap[form.plan_id] ?? []).length > 0 && (
+                  <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-700">
+                    <Info className="w-4 h-4 flex-shrink-0 text-blue-500" />
+                    <span>Nenhuma solicitação de compra encontrada para este equipamento e plano. Itens carregados do plano de manutenção.</span>
                   </div>
                 )}
 
@@ -583,10 +663,31 @@ export default function ManutencoesPage() {
                     </label>
                   </div>
                   <input type="number" step="0.01" min={0} className="input font-mono" value={form.labor_cost} onChange={e => setForm(f => ({ ...f, labor_cost: e.target.value }))} placeholder="0,00" />
-                  <div className="grid grid-cols-3 gap-4 pt-2 border-t border-green-200 text-sm">
-                    <div><p className="text-xs text-green-700">Materiais</p><p className="font-bold font-mono">{formatBRL(itemsTotal())}</p></div>
-                    <div><p className="text-xs text-green-700">Mão de Obra</p><p className="font-bold font-mono">{formatBRL(parseFloat(form.labor_cost) || 0)}</p></div>
-                    <div><p className="text-xs text-green-700 font-bold">Total</p><p className="font-bold text-green-800 font-mono text-base">{formatBRL(grandTotal())}</p></div>
+                  <div className="pt-2 border-t border-green-200 space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-xs text-green-700">Materiais (estimado)</span>
+                      <span className="font-mono text-green-700">{formatBRL(itemsTotal())}</span>
+                    </div>
+                    {materialDiscount !== 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-xs text-green-700">{materialDiscount < 0 ? 'Desconto (NF)' : 'Acréscimo (NF)'}</span>
+                        <span className={`font-mono text-xs font-semibold ${materialDiscount < 0 ? 'text-emerald-600' : 'text-orange-500'}`}>
+                          {materialDiscount < 0 ? '-' : '+'}{formatBRL(Math.abs(materialDiscount))}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between border-t border-green-200 pt-1">
+                      <span className="text-xs text-green-800 font-semibold">Materiais (final)</span>
+                      <span className="font-bold font-mono">{formatBRL(materialTotal())}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs text-green-700">Mão de Obra</span>
+                      <span className="font-mono">{formatBRL(parseFloat(form.labor_cost) || 0)}</span>
+                    </div>
+                    <div className="flex justify-between border-t border-green-300 pt-1">
+                      <span className="text-xs text-green-800 font-bold">Total Geral</span>
+                      <span className="font-bold text-green-800 font-mono text-base">{formatBRL(grandTotal())}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -604,7 +705,13 @@ export default function ManutencoesPage() {
             </div>
 
             <div className="px-6 py-4 border-t flex-shrink-0 flex gap-3 justify-between items-center">
-              <span className="text-sm font-semibold text-gray-600">Total: <span className="text-green-700">{formatBRL(grandTotal())}</span></span>
+              <span className="text-sm font-semibold text-gray-600">Total: <span className="text-green-700">{formatBRL(grandTotal())}</span>
+                {materialDiscount !== 0 && (
+                  <span className={`ml-2 text-xs font-normal ${materialDiscount < 0 ? 'text-emerald-600' : 'text-orange-500'}`}>
+                    ({materialDiscount < 0 ? 'desconto' : 'acréscimo'} {formatBRL(Math.abs(materialDiscount))})
+                  </span>
+                )}
+              </span>
               <div className="flex gap-3">
                 <button className="btn-secondary" onClick={() => setShowForm(false)}>Cancelar</button>
                 <button className="btn-primary" form="manut-form" type="submit" disabled={saving}>
