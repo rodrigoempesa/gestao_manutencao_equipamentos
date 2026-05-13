@@ -61,12 +61,20 @@ export default function SolicitacoesPage() {
   // signed URLs cache: requestId → url
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({})
 
+  // Products for avulsa items
+  const [products, setProducts] = useState<Product[]>([])
+
   // Create modal state
   const [showCreate, setShowCreate] = useState(false)
   const [selEquipment, setSelEquipment] = useState('')
   const [selPlan, setSelPlan] = useState('')
   const [notes, setNotes] = useState('')
   const [filteredPlans, setFilteredPlans] = useState<MaintenancePlan[]>([])
+  // checked state for plan items (id → checked); undefined = checked by default
+  const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({})
+  // avulsa items added manually
+  interface AvulsaItem { _key: string; product_id: string; quantity: string }
+  const [avulsaItems, setAvulsaItems] = useState<AvulsaItem[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -77,17 +85,19 @@ export default function SolicitacoesPage() {
 
   const loadData = useCallback(async () => {
     setLoading(true)
-    const [{ data: reqs }, { data: equips }, { data: allPlans }, { data: allPlanItems }] = await Promise.all([
+    const [{ data: reqs }, { data: equips }, { data: allPlans }, { data: allPlanItems }, { data: prods }] = await Promise.all([
       supabase.from('purchase_requests')
         .select(`*, equipment:equipment_id(id,code,name,branches(name)), maintenance_plans:plan_id(id,name,interval_value,equipment_models(tracking_type)), purchase_request_items(*, products(id,code,name,unit,unit_price))`)
         .order('created_at', { ascending: false }),
       supabase.from('equipment').select('*, equipment_models(*, brands(*)), branches(*)').eq('active', true).order('code'),
       supabase.from('maintenance_plans').select('*, equipment_models(tracking_type)').order('interval_value'),
       supabase.from('maintenance_plan_items').select('*, products(id,code,name,unit,unit_price)').order('order_index'),
+      supabase.from('products').select('id,code,name,unit,unit_price').eq('active', true).order('name'),
     ])
     setRequests((reqs as PurchaseRequest[]) ?? [])
     setEquipment((equips as Equipment[]) ?? [])
     setPlans((allPlans as MaintenancePlan[]) ?? [])
+    setProducts((prods as Product[]) ?? [])
     const piMap: Record<string, PlanItem[]> = {}
     ;((allPlanItems as PlanItem[]) ?? []).forEach((i: any) => {
       if (!piMap[i.plan_id]) piMap[i.plan_id] = []
@@ -126,38 +136,88 @@ export default function SolicitacoesPage() {
   function handleEquipmentSelect(eqId: string) {
     setSelEquipment(eqId)
     setSelPlan('')
+    setCheckedItems({})
+    setAvulsaItems([])
     const eq = equipment.find(e => e.id === eqId)
     setFilteredPlans(eq ? plans.filter(p => p.model_id === eq.model_id) : [])
+  }
+
+  function handlePlanSelect(planId: string) {
+    setSelPlan(planId)
+    // Reset checked state so all new plan items default to checked
+    setCheckedItems({})
   }
 
   const previewItems = selPlan
     ? (planItemsMap[selPlan] ?? []).filter(i => i.product_id && i.products)
     : []
 
+  const selectedPlanItems = previewItems.filter(pi => checkedItems[pi.id] !== false)
+
+  function addAvulsaItem() {
+    setAvulsaItems(prev => [...prev, { _key: Math.random().toString(36).slice(2), product_id: '', quantity: '1' }])
+  }
+
+  function removeAvulsaItem(key: string) {
+    setAvulsaItems(prev => prev.filter(i => i._key !== key))
+  }
+
+  function resetCreateModal() {
+    setShowCreate(false)
+    setSelEquipment(''); setSelPlan(''); setNotes('')
+    setFilteredPlans([]); setCheckedItems({}); setAvulsaItems([])
+  }
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
-    if (!selEquipment || !selPlan) { setError('Selecione o equipamento e o plano.'); return }
-    if (previewItems.length === 0) { setError('Este plano não possui produtos cadastrados nos itens.'); return }
+    if (!selEquipment) { setError('Selecione o equipamento.'); return }
+
+    const validAvulsa = avulsaItems.filter(i => i.product_id && parseFloat(i.quantity) > 0)
+    if (selPlan && selectedPlanItems.length === 0 && validAvulsa.length === 0) {
+      setError('Selecione pelo menos um item do plano ou adicione um produto avulso.'); return
+    }
+    if (!selPlan && validAvulsa.length === 0) {
+      setError('Adicione pelo menos um produto à solicitação avulsa.'); return
+    }
+
     setSaving(true); setError('')
     const { data: { user } } = await supabase.auth.getUser()
     const { data: req, error: reqErr } = await supabase
       .from('purchase_requests')
-      .insert({ equipment_id: selEquipment, plan_id: selPlan, notes: notes.trim() || null, created_by: user?.id })
+      .insert({ equipment_id: selEquipment, plan_id: selPlan || null, notes: notes.trim() || null, created_by: user?.id })
       .select().single()
     if (reqErr) { setError(reqErr.message); setSaving(false); return }
-    const itemPayloads = previewItems.map(pi => ({
-      request_id: req.id,
-      product_id: pi.product_id,
-      plan_item_id: pi.id,
-      description: pi.description || pi.products?.name || '',
-      quantity: pi.quantity,
-      unit: pi.products?.unit ?? 'un',
-      unit_price: pi.products?.unit_price ?? 0,
-    }))
-    const { error: itemErr } = await supabase.from('purchase_request_items').insert(itemPayloads)
-    if (itemErr) { setError(itemErr.message); setSaving(false); return }
-    setShowCreate(false); setSelEquipment(''); setSelPlan(''); setNotes(''); setFilteredPlans([])
-    loadData(); setSaving(false)
+
+    const itemPayloads: any[] = [
+      ...selectedPlanItems.map(pi => ({
+        request_id: req.id,
+        product_id: pi.product_id,
+        plan_item_id: pi.id,
+        description: pi.description || pi.products?.name || '',
+        quantity: pi.quantity,
+        unit: pi.products?.unit ?? 'un',
+        unit_price: pi.products?.unit_price ?? 0,
+      })),
+      ...validAvulsa.map(ai => {
+        const prod = products.find(p => p.id === ai.product_id)!
+        return {
+          request_id: req.id,
+          product_id: ai.product_id,
+          plan_item_id: null,
+          description: prod.name,
+          quantity: parseFloat(ai.quantity),
+          unit: prod.unit,
+          unit_price: prod.unit_price,
+        }
+      }),
+    ]
+
+    if (itemPayloads.length > 0) {
+      const { error: itemErr } = await supabase.from('purchase_request_items').insert(itemPayloads)
+      if (itemErr) { setError(itemErr.message); setSaving(false); return }
+    }
+
+    resetCreateModal(); loadData(); setSaving(false)
   }
 
   function openApproval(req: PurchaseRequest) {
@@ -474,12 +534,12 @@ export default function SolicitacoesPage() {
       {/* Create Modal */}
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 bg-white z-10">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
               <h3 className="font-semibold text-lg">Nova Solicitação de Compra</h3>
-              <button onClick={() => setShowCreate(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+              <button onClick={resetCreateModal} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
             </div>
-            <form onSubmit={handleCreate} className="px-6 py-4 space-y-4">
+            <form onSubmit={handleCreate} className="px-6 py-4 space-y-4 overflow-y-auto flex-1">
               <div>
                 <label className="label">Equipamento *</label>
                 <select className="input" value={selEquipment} onChange={e => handleEquipmentSelect(e.target.value)} required>
@@ -494,71 +554,140 @@ export default function SolicitacoesPage() {
 
               {selEquipment && (
                 <div>
-                  <label className="label">Plano de Manutenção *</label>
-                  {filteredPlans.length === 0 ? (
-                    <p className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                      Nenhum plano cadastrado para o modelo deste equipamento.
-                    </p>
-                  ) : (
-                    <select className="input" value={selPlan} onChange={e => setSelPlan(e.target.value)} required>
-                      <option value="">Selecione o plano...</option>
-                      {filteredPlans.map(p => {
-                        const unit = (p as any).equipment_models?.tracking_type === 'hours' ? 'h' : 'km'
-                        return <option key={p.id} value={p.id}>{p.name} — {p.interval_value.toLocaleString('pt-BR')}{unit}</option>
-                      })}
-                    </select>
+                  <label className="label">Plano de Manutenção <span className="text-gray-400 font-normal">(opcional)</span></label>
+                  <select className="input" value={selPlan} onChange={e => handlePlanSelect(e.target.value)}>
+                    <option value="">— Solicitação avulsa (sem plano) —</option>
+                    {filteredPlans.map(p => {
+                      const unit = (p as any).equipment_models?.tracking_type === 'hours' ? 'h' : 'km'
+                      return <option key={p.id} value={p.id}>{p.name} — {p.interval_value.toLocaleString('pt-BR')}{unit}</option>
+                    })}
+                  </select>
+                  {filteredPlans.length === 0 && (
+                    <p className="text-xs text-gray-400 mt-1">Nenhum plano cadastrado para este modelo. Use a solicitação avulsa.</p>
                   )}
                 </div>
               )}
 
+              {/* Plan items with checkboxes */}
               {selPlan && (
                 <div className="border border-blue-100 rounded-xl overflow-hidden">
-                  <div className="px-4 py-2 bg-blue-50 flex items-center gap-2">
-                    <Package className="w-4 h-4 text-blue-600" />
-                    <span className="text-sm font-semibold text-blue-800">
-                      Itens do plano ({previewItems.length} produto(s))
-                    </span>
+                  <div className="px-4 py-2 bg-blue-50 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Package className="w-4 h-4 text-blue-600" />
+                      <span className="text-sm font-semibold text-blue-800">
+                        Itens do plano — {selectedPlanItems.length}/{previewItems.length} selecionados
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                      onClick={() => {
+                        const allChecked = previewItems.every(pi => checkedItems[pi.id] !== false)
+                        const newState: Record<string, boolean> = {}
+                        previewItems.forEach(pi => { newState[pi.id] = !allChecked })
+                        setCheckedItems(newState)
+                      }}
+                    >
+                      {previewItems.every(pi => checkedItems[pi.id] !== false) ? 'Desmarcar todos' : 'Marcar todos'}
+                    </button>
                   </div>
                   {previewItems.length === 0 ? (
                     <p className="text-sm text-gray-400 px-4 py-3">Este plano não possui produtos cadastrados.</p>
                   ) : (
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 border-b border-gray-100">
-                        <tr>
-                          <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500">Ref.</th>
-                          <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500">Item</th>
-                          <th className="text-right px-4 py-2 text-xs font-semibold text-gray-500">Qtd</th>
-                          <th className="text-right px-4 py-2 text-xs font-semibold text-gray-500">Preço Unit.</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {previewItems.map(pi => (
-                          <tr key={pi.id}>
-                            <td className="px-4 py-2 font-mono text-xs text-blue-700 font-semibold">{pi.products?.code}</td>
-                            <td className="px-4 py-2">
-                              <p className="font-medium text-xs">{pi.description || pi.products?.name}</p>
-                              {pi.description && pi.products?.name !== pi.description && (
-                                <p className="text-xs text-gray-400">{pi.products?.name}</p>
-                              )}
-                            </td>
-                            <td className="px-4 py-2 text-right font-mono text-xs">{pi.quantity} {pi.products?.unit}</td>
-                            <td className="px-4 py-2 text-right font-mono text-xs text-gray-500">
-                              {(pi.products?.unit_price ?? 0) > 0 ? formatBRL(pi.products!.unit_price) : '—'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      {previewItems.reduce((s, i) => s + i.quantity * (i.products?.unit_price ?? 0), 0) > 0 && (
-                        <tfoot>
-                          <tr className="border-t border-gray-200 bg-green-50">
-                            <td colSpan={3} className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Total estimado:</td>
-                            <td className="px-4 py-2 text-right font-bold text-green-700 font-mono text-xs">
-                              {formatBRL(previewItems.reduce((s, i) => s + i.quantity * (i.products?.unit_price ?? 0), 0))}
-                            </td>
-                          </tr>
-                        </tfoot>
-                      )}
-                    </table>
+                    <div className="divide-y divide-gray-50">
+                      {previewItems.map(pi => {
+                        const isChecked = checkedItems[pi.id] !== false
+                        return (
+                          <label
+                            key={pi.id}
+                            className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${isChecked ? 'bg-white' : 'bg-gray-50 opacity-60'}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={e => setCheckedItems(prev => ({ ...prev, [pi.id]: e.target.checked }))}
+                              className="w-4 h-4 accent-blue-600 flex-shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-xs text-blue-700 font-semibold flex-shrink-0">{pi.products?.code}</span>
+                                <span className="text-xs font-medium text-gray-800 truncate">{pi.description || pi.products?.name}</span>
+                              </div>
+                            </div>
+                            <div className="text-right flex-shrink-0 text-xs text-gray-500">
+                              <p className="font-mono">{pi.quantity} {pi.products?.unit}</p>
+                              {(pi.products?.unit_price ?? 0) > 0 && <p>{formatBRL(pi.products!.unit_price)}</p>}
+                            </div>
+                          </label>
+                        )
+                      })}
+                      {(() => {
+                        const selTotal = selectedPlanItems.reduce((s, i) => s + i.quantity * (i.products?.unit_price ?? 0), 0)
+                        return selTotal > 0 ? (
+                          <div className="flex items-center justify-between px-4 py-2 bg-green-50 border-t border-green-100">
+                            <span className="text-xs font-semibold text-gray-600">Total estimado selecionado:</span>
+                            <span className="font-bold text-green-700 font-mono text-xs">{formatBRL(selTotal)}</span>
+                          </div>
+                        ) : null
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Avulsa items — always shown when equipment is selected */}
+              {selEquipment && (
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                  <div className="px-4 py-2 bg-gray-50 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Package className="w-4 h-4 text-gray-500" />
+                      <span className="text-sm font-semibold text-gray-700">
+                        {selPlan ? 'Produtos adicionais' : 'Produtos avulsos'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                      onClick={addAvulsaItem}
+                    >
+                      <Plus className="w-3 h-3" /> Adicionar produto
+                    </button>
+                  </div>
+                  {avulsaItems.length === 0 ? (
+                    <p className="text-sm text-gray-400 px-4 py-3">Nenhum produto avulso adicionado.</p>
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {avulsaItems.map(ai => {
+                        const prod = products.find(p => p.id === ai.product_id)
+                        return (
+                          <div key={ai._key} className="flex items-center gap-2 px-4 py-2.5">
+                            <select
+                              className="input flex-1 text-xs py-1"
+                              value={ai.product_id}
+                              onChange={e => setAvulsaItems(prev => prev.map(x => x._key === ai._key ? { ...x, product_id: e.target.value } : x))}
+                            >
+                              <option value="">Selecione o produto...</option>
+                              {products.map(p => (
+                                <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+                              ))}
+                            </select>
+                            <input
+                              type="number"
+                              className="input w-20 text-xs py-1"
+                              placeholder="Qtd"
+                              min="0.01"
+                              step="0.01"
+                              value={ai.quantity}
+                              onChange={e => setAvulsaItems(prev => prev.map(x => x._key === ai._key ? { ...x, quantity: e.target.value } : x))}
+                            />
+                            {prod && <span className="text-xs text-gray-400 w-8 flex-shrink-0">{prod.unit}</span>}
+                            <button type="button" onClick={() => removeAvulsaItem(ai._key)} className="text-red-400 hover:text-red-600 flex-shrink-0">
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
                   )}
                 </div>
               )}
@@ -570,8 +699,8 @@ export default function SolicitacoesPage() {
 
               {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
               <div className="flex gap-3 justify-end">
-                <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Cancelar</button>
-                <button type="submit" className="btn-primary" disabled={saving || previewItems.length === 0}>
+                <button type="button" className="btn-secondary" onClick={resetCreateModal}>Cancelar</button>
+                <button type="submit" className="btn-primary" disabled={saving}>
                   {saving ? 'Salvando...' : 'Criar Solicitação'}
                 </button>
               </div>
