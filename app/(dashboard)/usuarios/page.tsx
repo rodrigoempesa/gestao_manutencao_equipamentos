@@ -305,20 +305,22 @@ export default function UsuariosPage() {
                         const enabled = permMatrix[r.value]?.[mod.slug] ?? false
                         const isAdminGeneralRole = r.value === 'admin_geral'
                         return (
-                          <td key={r.value} className="px-5 py-3 text-center">
-                            {isAdminGeneralRole ? (
-                              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-100">
-                                <Check className="w-3.5 h-3.5 text-green-600" />
-                              </span>
-                            ) : (
-                              <button
-                                onClick={() => togglePerm(r.value, mod.slug)}
-                                className={`w-10 h-6 rounded-full transition-colors relative ${enabled ? 'bg-blue-600' : 'bg-gray-200'}`}
-                                title={enabled ? 'Clique para desativar' : 'Clique para ativar'}
-                              >
-                                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                              </button>
-                            )}
+                          <td key={r.value} className="px-5 py-3">
+                            <div className="flex justify-center">
+                              {isAdminGeneralRole ? (
+                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-100">
+                                  <Check className="w-3.5 h-3.5 text-green-600" />
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={() => togglePerm(r.value, mod.slug)}
+                                  title={enabled ? 'Clique para desativar' : 'Clique para ativar'}
+                                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition-colors focus:outline-none ${enabled ? 'bg-blue-600' : 'bg-gray-200'}`}
+                                >
+                                  <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-lg transition-transform ${enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                                </button>
+                              )}
+                            </div>
                           </td>
                         )
                       })}
