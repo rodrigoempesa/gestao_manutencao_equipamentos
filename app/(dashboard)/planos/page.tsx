@@ -534,12 +534,13 @@ export default function PlanosPage() {
       {/* Item Modal — produto + quantidade + serviço juntos */}
       {showItemModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
               <h3 className="font-semibold">{itemForm.id ? 'Editar' : 'Novo'} Item do Plano</h3>
               <button onClick={() => setShowItemModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
             </div>
-            <form onSubmit={saveItem} className="px-6 py-4 space-y-4">
+            <form onSubmit={saveItem} className="flex flex-col flex-1 min-h-0">
+            <div className="px-6 py-4 space-y-4 overflow-y-auto flex-1">
 
               {/* Produto */}
               <div className="border border-blue-100 rounded-xl p-4 space-y-3 bg-blue-50">
@@ -659,11 +660,14 @@ export default function PlanosPage() {
                 <input type="number" min={0} className="input w-24" value={itemForm.order_index} onChange={e => setItemForm(f => ({ ...f, order_index: e.target.value }))} />
               </div>
 
+            </div>
+            <div className="px-6 py-4 border-t flex-shrink-0 bg-gray-50 space-y-3">
               {error && <p className="text-sm text-red-600">{error}</p>}
               <div className="flex gap-3 justify-end">
                 <button type="button" className="btn-secondary" onClick={() => setShowItemModal(false)}>Cancelar</button>
                 <button type="submit" className="btn-primary" disabled={saving}>{saving ? '...' : 'Salvar Item'}</button>
               </div>
+            </div>
             </form>
           </div>
         </div>
