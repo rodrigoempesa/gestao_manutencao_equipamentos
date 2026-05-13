@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Equipment, EquipmentModel, Branch } from '@/lib/types'
 import { trackingLabel } from '@/lib/utils'
-import { ClipboardList, Plus, Pencil, ToggleLeft, ToggleRight, X, Search, SlidersHorizontal } from 'lucide-react'
+import { ClipboardList, Plus, Pencil, ToggleLeft, ToggleRight, X, Search, SlidersHorizontal, Upload, AlertCircle, CheckCircle2, Download } from 'lucide-react'
 
 interface FormState {
   id: string
@@ -23,6 +23,44 @@ const emptyForm = (): FormState => ({
   year: '', serial_number: '', notes: '', active: true,
 })
 
+interface ImportRow {
+  identificacao: string
+  marca: string
+  modelo: string
+  fabricacao: string
+  chassi: string
+  localizacao: string
+  // resolved
+  _brandId?: string
+  _modelId?: string   // set after model upsert
+  _errors: string[]
+}
+
+function parseCSV(text: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ''
+  let inQuotes = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (inQuotes) {
+      if (ch === '"' && text[i + 1] === '"') { field += '"'; i++ }
+      else if (ch === '"') inQuotes = false
+      else field += ch
+    } else {
+      if (ch === '"') inQuotes = true
+      else if (ch === ',') { row.push(field.trim()); field = '' }
+      else if (ch === '\n' || ch === '\r') {
+        if (field || row.length) { row.push(field.trim()); rows.push(row) }
+        row = []; field = ''
+        if (ch === '\r' && text[i + 1] === '\n') i++
+      } else field += ch
+    }
+  }
+  if (field || row.length) { row.push(field.trim()); rows.push(row) }
+  return rows
+}
+
 export default function EquipamentosPage() {
   const supabase = createClient()
   const [equipment, setEquipment] = useState<Equipment[]>([])
@@ -39,6 +77,15 @@ export default function EquipamentosPage() {
   const [filterBrand, setFilterBrand] = useState('')
   const [filterModel, setFilterModel] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('active')
+
+  // Import state
+  const [showImport, setShowImport] = useState(false)
+  const [importRows, setImportRows] = useState<ImportRow[]>([])
+  const [importTrackingType, setImportTrackingType] = useState<'hours' | 'km'>('hours')
+  const [importSaving, setImportSaving] = useState(false)
+  const [importDone, setImportDone] = useState(false)
+  const [importResult, setImportResult] = useState({ inserted: 0, errors: 0 })
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -131,14 +178,161 @@ export default function EquipamentosPage() {
     loadData()
   }
 
-  // Derived list of brands from loaded models
+  // ── Import helpers ──
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = ev => {
+      const text = ev.target?.result as string
+      processCSV(text)
+    }
+    reader.readAsText(file, 'UTF-8')
+    e.target.value = ''
+  }
+
+  function processCSV(text: string) {
+    const rows = parseCSV(text)
+    if (rows.length < 2) return
+
+    // Detect header row (case-insensitive)
+    const header = rows[0].map(h => h.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''))
+    const idx = {
+      id:    header.findIndex(h => h.includes('identifica')),
+      marca: header.findIndex(h => h.includes('marca')),
+      model: header.findIndex(h => h.includes('model')),
+      fab:   header.findIndex(h => h.includes('fabrica')),
+      chassi:header.findIndex(h => h.includes('chassi') || h.includes('serie')),
+      loc:   header.findIndex(h => h.includes('localiza')),
+    }
+
+    // Load all brands for matching
+    const parsed: ImportRow[] = rows.slice(1).filter(r => r.some(c => c)).map(r => {
+      const identificacao = r[idx.id] ?? ''
+      const marca         = r[idx.marca] ?? ''
+      const modelo        = r[idx.model] ?? ''
+      const fabricacao    = r[idx.fab] ?? ''
+      const chassi        = r[idx.chassi] ?? ''
+      const localizacao   = r[idx.loc] ?? ''
+      const errs: string[] = []
+
+      if (!identificacao) errs.push('IDENTIFICAÇÃO vazio')
+      if (!marca)         errs.push('MARCA vazia')
+      if (!modelo)        errs.push('MODELO vazio')
+      if (!localizacao)   errs.push('LOCALIZAÇÃO vazia')
+
+      // Validate UUID format for localizacao
+      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      if (localizacao && !uuidRe.test(localizacao)) errs.push('LOCALIZAÇÃO deve ser um UUID válido')
+
+      return { identificacao, marca, modelo, fabricacao, chassi, localizacao, _errors: errs }
+    })
+
+    // Match brands (fetch from current models state — brands are embedded)
+    const brandMap = new Map<string, string>() // name.lower → id
+    models.forEach(m => {
+      const b = (m as any).brands
+      if (b) brandMap.set(b.name.toLowerCase(), b.id)
+    })
+
+    parsed.forEach(row => {
+      const bid = brandMap.get(row.marca.toLowerCase())
+      if (!bid) row._errors.push(`Marca "${row.marca}" não encontrada`)
+      else row._brandId = bid
+    })
+
+    setImportRows(parsed)
+    setImportDone(false)
+  }
+
+  async function runImport() {
+    setImportSaving(true)
+    const validRows = importRows.filter(r => r._errors.length === 0)
+    let inserted = 0
+    let errors = 0
+
+    // Step 1: upsert models (brand_id + name) and collect their IDs
+    const modelKey = (brandId: string, name: string) => `${brandId}|${name.toLowerCase()}`
+    const modelIdMap = new Map<string, string>() // key → id
+
+    // Pre-populate from existing models
+    models.forEach(m => modelIdMap.set(modelKey(m.brand_id, m.name), m.id))
+
+    // Find models that need to be created
+    const toCreateModels = validRows
+      .filter(r => r._brandId && !modelIdMap.has(modelKey(r._brandId!, r.modelo)))
+      .reduce((acc, r) => {
+        const key = modelKey(r._brandId!, r.modelo)
+        if (!acc.has(key)) acc.set(key, { brand_id: r._brandId!, name: r.modelo, tracking_type: importTrackingType })
+        return acc
+      }, new Map<string, any>())
+
+    for (const [key, payload] of toCreateModels.entries()) {
+      const { data, error } = await supabase
+        .from('equipment_models')
+        .insert(payload)
+        .select('id')
+        .single()
+      if (error) {
+        // Maybe it already exists (race condition) — try to fetch
+        const { data: existing } = await supabase
+          .from('equipment_models')
+          .select('id')
+          .eq('brand_id', payload.brand_id)
+          .eq('name', payload.name)
+          .single()
+        if (existing) modelIdMap.set(key, existing.id)
+      } else if (data) {
+        modelIdMap.set(key, data.id)
+      }
+    }
+
+    // Step 2: insert equipment
+    for (const row of validRows) {
+      if (!row._brandId) { errors++; continue }
+      const key = modelKey(row._brandId, row.modelo)
+      const modelId = modelIdMap.get(key)
+      if (!modelId) { errors++; continue }
+
+      const year = parseInt(row.fabricacao)
+      const { error: insertErr } = await supabase.from('equipment').insert({
+        code: row.identificacao.trim().toUpperCase(),
+        name: row.identificacao.trim(),
+        model_id: modelId,
+        branch_id: row.localizacao.trim(),
+        year: isNaN(year) ? null : year,
+        serial_number: row.chassi.trim() || null,
+        active: true,
+      })
+
+      if (insertErr) errors++
+      else inserted++
+    }
+
+    setImportResult({ inserted, errors })
+    setImportSaving(false)
+    setImportDone(true)
+    if (inserted > 0) loadData()
+  }
+
+  function downloadTemplate() {
+    const header = 'IDENTIFICAÇÃO,MARCA,MODELO,FABRICAÇÃO,CHASSI,LOCALIZAÇÃO ATUAL'
+    const example = 'JD750J-001,John Deere,750J,2020,ABC123DEF,xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+    const blob = new Blob([header + '\n' + example], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = 'template_equipamentos.csv'
+    a.click(); URL.revokeObjectURL(url)
+  }
+
+  // ── Derived ──
+
   const brands = Array.from(
     new Map(
       models.map(m => [(m as any).brands?.id, (m as any).brands])
     ).entries()
   ).filter(([id]) => id).map(([, b]) => b as { id: string; name: string })
 
-  // Models filtered by selected brand
   const filteredModels = filterBrand
     ? models.filter(m => (m as any).brands?.id === filterBrand)
     : models
@@ -168,6 +362,8 @@ export default function EquipamentosPage() {
   }
 
   const isAdmin = profile?.role === 'admin_geral' || profile?.role === 'admin_local'
+  const validCount = importRows.filter(r => r._errors.length === 0).length
+  const errorCount = importRows.filter(r => r._errors.length > 0).length
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Carregando...</div>
 
@@ -182,9 +378,14 @@ export default function EquipamentosPage() {
           <p className="text-gray-500 text-sm mt-1">{filtered.length} equipamento{filtered.length !== 1 ? 's' : ''}</p>
         </div>
         {isAdmin && (
-          <button className="btn-primary flex-shrink-0" onClick={openCreate}>
-            <Plus className="w-4 h-4" /> Novo
-          </button>
+          <div className="flex gap-2 flex-shrink-0">
+            <button className="btn-secondary" onClick={() => { setImportRows([]); setImportDone(false); setShowImport(true) }}>
+              <Upload className="w-4 h-4" /> Importar CSV
+            </button>
+            <button className="btn-primary" onClick={openCreate}>
+              <Plus className="w-4 h-4" /> Novo
+            </button>
+          </div>
         )}
       </div>
 
@@ -201,7 +402,6 @@ export default function EquipamentosPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          {/* Search */}
           <div className="relative lg:col-span-2">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <input
@@ -213,7 +413,6 @@ export default function EquipamentosPage() {
             />
           </div>
 
-          {/* Filial */}
           {profile?.role === 'admin_geral' && (
             <select className="input" value={filterBranch} onChange={e => setFilterBranch(e.target.value)}>
               <option value="">Todas as filiais</option>
@@ -221,7 +420,6 @@ export default function EquipamentosPage() {
             </select>
           )}
 
-          {/* Marca */}
           <select
             className="input"
             value={filterBrand}
@@ -231,13 +429,11 @@ export default function EquipamentosPage() {
             {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
 
-          {/* Modelo */}
           <select className="input" value={filterModel} onChange={e => setFilterModel(e.target.value)}>
             <option value="">Todos os modelos</option>
             {filteredModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
 
-          {/* Status */}
           <select className="input" value={filterStatus} onChange={e => setFilterStatus(e.target.value as any)}>
             <option value="all">Todos os status</option>
             <option value="active">Somente ativos</option>
@@ -313,7 +509,7 @@ export default function EquipamentosPage() {
         </div>
       </div>
 
-      {/* Modal */}
+      {/* Edit/Create Modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
@@ -385,6 +581,131 @@ export default function EquipamentosPage() {
               <button className="btn-primary" form="equip-form" type="submit" disabled={saving}>
                 {saving ? 'Salvando...' : 'Salvar'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Modal */}
+      {showImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
+              <div>
+                <h3 className="font-semibold text-lg">Importar Equipamentos via CSV</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Colunas: IDENTIFICAÇÃO · MARCA · MODELO · FABRICAÇÃO · CHASSI · LOCALIZAÇÃO ATUAL (UUID)</p>
+              </div>
+              <button onClick={() => setShowImport(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+
+              {/* Step 1: upload + config */}
+              {!importDone && (
+                <div className="flex flex-wrap items-end gap-4">
+                  <div>
+                    <label className="label">Tipo de medição padrão para modelos novos</label>
+                    <select className="input w-52" value={importTrackingType} onChange={e => setImportTrackingType(e.target.value as any)}>
+                      <option value="hours">Horímetro (horas)</option>
+                      <option value="km">Odômetro (km)</option>
+                    </select>
+                  </div>
+                  <div className="flex gap-2">
+                    <button className="btn-secondary" onClick={downloadTemplate}>
+                      <Download className="w-4 h-4" /> Template CSV
+                    </button>
+                    <button
+                      className="btn-primary"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Upload className="w-4 h-4" /> Selecionar arquivo
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".csv,.txt"
+                      className="hidden"
+                      onChange={handleFileChange}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Result after import */}
+              {importDone && (
+                <div className={`rounded-xl px-5 py-4 flex items-center gap-3 ${importResult.errors === 0 ? 'bg-green-50 border border-green-200' : 'bg-yellow-50 border border-yellow-200'}`}>
+                  <CheckCircle2 className={`w-6 h-6 flex-shrink-0 ${importResult.errors === 0 ? 'text-green-600' : 'text-yellow-600'}`} />
+                  <div>
+                    <p className="font-semibold text-gray-800">{importResult.inserted} equipamento{importResult.inserted !== 1 ? 's' : ''} importado{importResult.inserted !== 1 ? 's' : ''} com sucesso</p>
+                    {importResult.errors > 0 && <p className="text-sm text-yellow-700">{importResult.errors} linha{importResult.errors !== 1 ? 's' : ''} com erro foram ignoradas</p>}
+                  </div>
+                </div>
+              )}
+
+              {/* Preview table */}
+              {importRows.length > 0 && !importDone && (
+                <>
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="flex items-center gap-1 text-green-700"><CheckCircle2 className="w-4 h-4" /> {validCount} válido{validCount !== 1 ? 's' : ''}</span>
+                    {errorCount > 0 && <span className="flex items-center gap-1 text-red-600"><AlertCircle className="w-4 h-4" /> {errorCount} com erro</span>}
+                  </div>
+                  <div className="rounded-xl border border-gray-200 overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50 border-b border-gray-100">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-semibold text-gray-500 w-6">#</th>
+                          <th className="text-left px-3 py-2 font-semibold text-gray-500">Identificação</th>
+                          <th className="text-left px-3 py-2 font-semibold text-gray-500">Marca</th>
+                          <th className="text-left px-3 py-2 font-semibold text-gray-500">Modelo</th>
+                          <th className="text-left px-3 py-2 font-semibold text-gray-500">Ano</th>
+                          <th className="text-left px-3 py-2 font-semibold text-gray-500">Chassi</th>
+                          <th className="text-left px-3 py-2 font-semibold text-gray-500 w-48">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {importRows.map((row, i) => (
+                          <tr key={i} className={row._errors.length > 0 ? 'bg-red-50' : 'bg-white'}>
+                            <td className="px-3 py-2 text-gray-400">{i + 1}</td>
+                            <td className="px-3 py-2 font-medium">{row.identificacao}</td>
+                            <td className="px-3 py-2">{row.marca}</td>
+                            <td className="px-3 py-2">{row.modelo}</td>
+                            <td className="px-3 py-2">{row.fabricacao}</td>
+                            <td className="px-3 py-2 font-mono">{row.chassi}</td>
+                            <td className="px-3 py-2">
+                              {row._errors.length === 0
+                                ? <span className="flex items-center gap-1 text-green-700"><CheckCircle2 className="w-3 h-3" /> OK</span>
+                                : <span className="flex items-start gap-1 text-red-600"><AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />{row._errors.join('; ')}</span>
+                              }
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t flex-shrink-0 bg-gray-50 flex items-center justify-between gap-4">
+              <p className="text-xs text-gray-400">
+                {importRows.length > 0 && !importDone
+                  ? `${importRows.length} linha${importRows.length !== 1 ? 's' : ''} carregada${importRows.length !== 1 ? 's' : ''} · ${validCount} serão importadas`
+                  : 'Exporte sua planilha como CSV (UTF-8) e selecione o arquivo'}
+              </p>
+              <div className="flex gap-3">
+                <button className="btn-secondary" onClick={() => setShowImport(false)}>
+                  {importDone ? 'Fechar' : 'Cancelar'}
+                </button>
+                {!importDone && validCount > 0 && (
+                  <button
+                    className="btn-primary"
+                    onClick={runImport}
+                    disabled={importSaving}
+                  >
+                    {importSaving ? 'Importando...' : `Importar ${validCount} equipamento${validCount !== 1 ? 's' : ''}`}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
