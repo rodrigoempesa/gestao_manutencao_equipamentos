@@ -73,8 +73,14 @@ export default function PlanosPage() {
       supabase.from('products').select('id,code,name,unit,unit_price').eq('active', true).order('name'),
       supabase.from('services').select('id,name,unit,unit_price').eq('active', true).order('name'),
     ])
-    setBrands((b as Brand[]) ?? [])
-    setModels((m as EquipmentModel[]) ?? [])
+    setBrands(((b as Brand[]) ?? []).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')))
+    const sortedModels = ((m as EquipmentModel[]) ?? []).sort((a, b) => {
+      const brandA = (a as any).brands?.name ?? ''
+      const brandB = (b as any).brands?.name ?? ''
+      const brandCmp = brandA.localeCompare(brandB, 'pt-BR')
+      return brandCmp !== 0 ? brandCmp : a.name.localeCompare(b.name, 'pt-BR')
+    })
+    setModels(sortedModels)
     setPlans((p as MaintenancePlan[]) ?? [])
     setProducts((prods as Product[]) ?? [])
     setServices((svcs as Service[]) ?? [])
