@@ -26,34 +26,40 @@ interface NavItem {
   href: string
   label: string
   icon: React.ComponentType<{ className?: string }>
-  roles: string[]
+  module: string
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin_geral', 'admin_local', 'encarregado'] },
-  { href: '/leituras', label: 'Leituras', icon: Gauge, roles: ['admin_geral', 'admin_local', 'encarregado'] },
-  { href: '/manutencoes', label: 'Manutenções', icon: Wrench, roles: ['admin_geral', 'admin_local'] },
-  { href: '/equipamentos', label: 'Equipamentos', icon: ClipboardList, roles: ['admin_geral', 'admin_local'] },
-  { href: '/produtos', label: 'Produtos (Estoque)', icon: Package, roles: ['admin_geral', 'admin_local'] },
-  { href: '/servicos', label: 'Serviços', icon: Hammer, roles: ['admin_geral', 'admin_local'] },
-  { href: '/planos', label: 'Planos de Manutenção', icon: BookOpen, roles: ['admin_geral'] },
-  { href: '/solicitacoes', label: 'Solicitações de Compra', icon: ShoppingCart, roles: ['admin_geral', 'admin_local'] },
-  { href: '/filiais', label: 'Filiais', icon: Building2, roles: ['admin_geral'] },
-  { href: '/usuarios', label: 'Usuários', icon: Users, roles: ['admin_geral', 'admin_local'] },
+  { href: '/',             label: 'Dashboard',              icon: LayoutDashboard, module: 'dashboard'    },
+  { href: '/leituras',     label: 'Leituras',               icon: Gauge,           module: 'leituras'     },
+  { href: '/manutencoes',  label: 'Manutenções',            icon: Wrench,          module: 'manutencoes'  },
+  { href: '/equipamentos', label: 'Equipamentos',           icon: ClipboardList,   module: 'equipamentos' },
+  { href: '/produtos',     label: 'Produtos (Estoque)',     icon: Package,         module: 'produtos'     },
+  { href: '/servicos',     label: 'Serviços',              icon: Hammer,          module: 'servicos'     },
+  { href: '/planos',       label: 'Planos de Manutenção',  icon: BookOpen,        module: 'planos'       },
+  { href: '/solicitacoes', label: 'Solicitações de Compra', icon: ShoppingCart,    module: 'solicitacoes' },
+  { href: '/filiais',      label: 'Filiais',               icon: Building2,       module: 'filiais'      },
+  { href: '/usuarios',     label: 'Usuários',              icon: Users,           module: 'usuarios'     },
 ]
-
 
 interface SidebarProps {
   profile: Profile
+  allowedModules: string[]
 }
 
-export default function Sidebar({ profile }: SidebarProps) {
+export default function Sidebar({ profile, allowedModules }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
   const [mobileOpen, setMobileOpen] = useState(false)
 
-  const visibleItems = NAV_ITEMS.filter(item => item.roles.includes(profile.role))
+  const visibleItems = NAV_ITEMS.filter(item => allowedModules.includes(item.module))
+
+  const roleLabel = (role: string) => {
+    if (role === 'admin_geral') return 'Admin Geral'
+    if (role === 'admin_local') return 'Admin Local'
+    return 'Operador'
+  }
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -86,7 +92,6 @@ export default function Sidebar({ profile }: SidebarProps) {
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
-      {/* Logo */}
       <div className="px-5 py-5 border-b border-blue-700">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
@@ -101,7 +106,6 @@ export default function Sidebar({ profile }: SidebarProps) {
 
       <NavLinks />
 
-      {/* User info + logout */}
       <div className="px-4 py-4 border-t border-blue-700">
         <div className="flex items-center gap-3 mb-3">
           <div className="w-8 h-8 rounded-full bg-blue-700 flex items-center justify-center flex-shrink-0">
@@ -111,10 +115,7 @@ export default function Sidebar({ profile }: SidebarProps) {
           </div>
           <div className="min-w-0">
             <p className="text-sm font-medium text-white truncate">{profile.name}</p>
-            <p className="text-xs text-blue-300 truncate">
-              {profile.role === 'admin_geral' ? 'Admin Geral' :
-               profile.role === 'admin_local' ? 'Admin Local' : 'Encarregado'}
-            </p>
+            <p className="text-xs text-blue-300 truncate">{roleLabel(profile.role)}</p>
           </div>
         </div>
         <button
@@ -130,7 +131,6 @@ export default function Sidebar({ profile }: SidebarProps) {
 
   return (
     <>
-      {/* Mobile toggle */}
       <button
         className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-blue-800 text-white rounded-lg shadow-lg"
         onClick={() => setMobileOpen(!mobileOpen)}
@@ -138,7 +138,6 @@ export default function Sidebar({ profile }: SidebarProps) {
         {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
       </button>
 
-      {/* Mobile overlay */}
       {mobileOpen && (
         <div
           className="lg:hidden fixed inset-0 z-40 bg-black/50"
@@ -146,7 +145,6 @@ export default function Sidebar({ profile }: SidebarProps) {
         />
       )}
 
-      {/* Mobile sidebar */}
       <aside className={cn(
         'lg:hidden fixed top-0 left-0 z-40 h-full w-64 bg-blue-800 transform transition-transform duration-300',
         mobileOpen ? 'translate-x-0' : '-translate-x-full'
@@ -154,7 +152,6 @@ export default function Sidebar({ profile }: SidebarProps) {
         <SidebarContent />
       </aside>
 
-      {/* Desktop sidebar */}
       <aside className="hidden lg:flex flex-col w-64 bg-blue-800 min-h-screen flex-shrink-0">
         <SidebarContent />
       </aside>
