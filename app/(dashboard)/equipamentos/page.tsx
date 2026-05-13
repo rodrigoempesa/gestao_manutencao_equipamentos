@@ -66,6 +66,7 @@ export default function EquipamentosPage() {
   const [equipment, setEquipment] = useState<Equipment[]>([])
   const [models, setModels] = useState<EquipmentModel[]>([])
   const [branches, setBranches] = useState<Branch[]>([])
+  const [allBrands, setAllBrands] = useState<{ id: string; name: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<FormState>(emptyForm())
@@ -97,18 +98,20 @@ export default function EquipamentosPage() {
     if (!prof) return
     setProfile(prof)
 
-    const [{ data: equips }, { data: mdls }, { data: brs }] = await Promise.all([
+    const [{ data: equips }, { data: mdls }, { data: brs }, { data: brds }] = await Promise.all([
       supabase
         .from('equipment')
         .select('*, equipment_models(*, brands(*)), branches(*)')
         .order('code'),
       supabase.from('equipment_models').select('*, brands(*)').order('name'),
       supabase.from('branches').select('*').eq('active', true).order('name'),
+      supabase.from('brands').select('id,name').order('name'),
     ])
 
     setEquipment((equips as Equipment[]) ?? [])
     setModels((mdls as EquipmentModel[]) ?? [])
     setBranches((brs as Branch[]) ?? [])
+    setAllBrands((brds as { id: string; name: string }[]) ?? [])
     setLoading(false)
   }, [supabase])
 
@@ -229,12 +232,9 @@ export default function EquipamentosPage() {
       return { identificacao, marca, modelo, fabricacao, chassi, localizacao, _errors: errs }
     })
 
-    // Match brands (fetch from current models state — brands are embedded)
+    // Match brands directly from allBrands (independent of whether they have models)
     const brandMap = new Map<string, string>() // name.lower → id
-    models.forEach(m => {
-      const b = (m as any).brands
-      if (b) brandMap.set(b.name.toLowerCase(), b.id)
-    })
+    allBrands.forEach(b => brandMap.set(b.name.toLowerCase(), b.id))
 
     parsed.forEach(row => {
       const bid = brandMap.get(row.marca.toLowerCase())
