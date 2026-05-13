@@ -159,6 +159,7 @@ export default async function DashboardPage() {
                 <th className="table-header">Código / Nome</th>
                 <th className="table-header">Filial</th>
                 <th className="table-header">Leitura Atual</th>
+                <th className="table-header">Acum. desde rev.</th>
                 <th className="table-header">Última Leitura</th>
                 <th className="table-header">Média/dia</th>
                 <th className="table-header">Última Manut.</th>
@@ -170,7 +171,7 @@ export default async function DashboardPage() {
             <tbody className="divide-y divide-gray-100">
               {list.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="table-cell text-center text-gray-400 py-12">
+                  <td colSpan={10} className="table-cell text-center text-gray-400 py-12">
                     Nenhum equipamento cadastrado
                   </td>
                 </tr>
@@ -196,6 +197,22 @@ export default async function DashboardPage() {
                     </td>
                     <td className="table-cell font-mono font-semibold">
                       {formatReading(eq.current_reading, eq.tracking_type)}
+                    </td>
+                    <td className="table-cell">
+                      {eq.accumulated_since_maintenance !== null ? (
+                        <span className={`font-mono font-semibold ${
+                          eq.next_maintenance_interval &&
+                          eq.accumulated_since_maintenance >= eq.next_maintenance_interval * 0.9
+                            ? 'text-red-600'
+                            : eq.accumulated_since_maintenance >= eq.next_maintenance_interval! * 0.7
+                            ? 'text-yellow-600'
+                            : 'text-gray-700'
+                        }`}>
+                          {formatReading(eq.accumulated_since_maintenance, eq.tracking_type)}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
                     </td>
                     <td className="table-cell text-gray-500">
                       {formatDate(eq.last_reading_date)}
