@@ -1,13 +1,14 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Equipment, MaintenancePlan } from '@/lib/types'
 import { formatDate } from '@/lib/utils'
 import { useSearchParams } from 'next/navigation'
 import {
   ShoppingCart, Plus, X, Printer, ChevronDown, ChevronRight,
-  Package, CheckCircle, XCircle, Clock, Truck,
+  Package, CheckCircle, XCircle, Clock, Truck, Paperclip,
+  FileText, Eye, Upload, Loader2,
 } from 'lucide-react'
 
 interface Product { id: string; code: string; name: string; unit: string; unit_price: number }
@@ -24,6 +25,7 @@ interface RequestItem {
 
 interface PurchaseRequest {
   id: string; status: string; notes: string | null; created_at: string
+  invoice_path?: string | null
   equipment?: any; maintenance_plans?: any
   purchase_request_items?: RequestItem[]
 }
@@ -42,6 +44,9 @@ function formatBRL(v: number) {
 export default function SolicitacoesPage() {
   const supabase = createClient()
   const searchParams = useSearchParams()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploadTargetId, setUploadTargetId] = useState<string | null>(null)
+
   const [requests, setRequests] = useState<PurchaseRequest[]>([])
   const [equipment, setEquipment] = useState<Equipment[]>([])
   const [plans, setPlans] = useState<MaintenancePlan[]>([])
@@ -49,6 +54,10 @@ export default function SolicitacoesPage() {
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [printRequest, setPrintRequest] = useState<PurchaseRequest | null>(null)
+  const [uploadingId, setUploadingId] = useState<string | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  // signed URLs cache: requestId → url
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({})
 
   // Create modal state
   const [showCreate, setShowCreate] = useState(false)
@@ -92,6 +101,19 @@ export default function SolicitacoesPage() {
     }
   }, [searchParams, plans])
 
+  // Generate signed URLs for all concluded requests that have an invoice
+  useEffect(() => {
+    const concluded = requests.filter(r => r.status === 'concluido' && r.invoice_path)
+    if (concluded.length === 0) return
+    concluded.forEach(async (r) => {
+      if (signedUrls[r.id] || !r.invoice_path) return
+      const { data } = await supabase.storage.from('invoices').createSignedUrl(r.invoice_path, 3600)
+      if (data?.signedUrl) {
+        setSignedUrls(prev => ({ ...prev, [r.id]: data.signedUrl }))
+      }
+    })
+  }, [requests]) // eslint-disable-line react-hooks/exhaustive-deps
+
   function handleEquipmentSelect(eqId: string) {
     setSelEquipment(eqId)
     setSelPlan('')
@@ -99,7 +121,6 @@ export default function SolicitacoesPage() {
     setFilteredPlans(eq ? plans.filter(p => p.model_id === eq.model_id) : [])
   }
 
-  // Preview items for selected plan (only those with a product)
   const previewItems = selPlan
     ? (planItemsMap[selPlan] ?? []).filter(i => i.product_id && i.products)
     : []
@@ -132,7 +153,7 @@ export default function SolicitacoesPage() {
 
   async function updateStatus(id: string, newStatus: string, req: PurchaseRequest) {
     if (newStatus === req.status) return
-    if (req.status === 'concluido') return // imutável após conclusão
+    if (req.status === 'concluido') return
 
     if (newStatus === 'aprovado') {
       const items = req.purchase_request_items ?? []
@@ -147,6 +168,48 @@ export default function SolicitacoesPage() {
     loadData()
   }
 
+  function triggerUpload(reqId: string) {
+    setUploadTargetId(reqId)
+    setUploadError(null)
+    fileInputRef.current?.click()
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !uploadTargetId) return
+    e.target.value = ''
+
+    const allowed = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png']
+    if (!allowed.includes(file.type)) {
+      setUploadError('Formato inválido. Use PDF, JPEG ou PNG.')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError('Arquivo muito grande. Máximo 10 MB.')
+      return
+    }
+
+    setUploadingId(uploadTargetId)
+    setUploadError(null)
+    const ext = file.name.split('.').pop()
+    const path = `${uploadTargetId}/nota_fiscal.${ext}`
+
+    const { error: upErr } = await supabase.storage.from('invoices').upload(path, file, { upsert: true })
+    if (upErr) { setUploadError(upErr.message); setUploadingId(null); return }
+
+    await supabase.from('purchase_requests').update({ invoice_path: path }).eq('id', uploadTargetId)
+
+    // Refresh signed URL for this request
+    const { data: signed } = await supabase.storage.from('invoices').createSignedUrl(path, 3600)
+    if (signed?.signedUrl) {
+      setSignedUrls(prev => ({ ...prev, [uploadTargetId]: signed.signedUrl }))
+    }
+
+    setUploadingId(null)
+    setUploadTargetId(null)
+    loadData()
+  }
+
   function requestTotal(req: PurchaseRequest) {
     return (req.purchase_request_items ?? []).reduce(
       (sum, i) => sum + i.quantity * i.unit_price, 0
@@ -157,6 +220,15 @@ export default function SolicitacoesPage() {
 
   return (
     <div className="space-y-6">
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,.jpg,.jpeg,.png"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-title flex items-center gap-2">
@@ -182,6 +254,8 @@ export default function SolicitacoesPage() {
           const plan = req.maintenance_plans as any
           const total = requestTotal(req)
           const trackingUnit = plan?.equipment_models?.tracking_type === 'hours' ? 'h' : 'km'
+          const isUploading = uploadingId === req.id
+          const signedUrl = signedUrls[req.id]
 
           return (
             <div key={req.id} className="card p-0 overflow-hidden">
@@ -196,6 +270,11 @@ export default function SolicitacoesPage() {
                       <span className="font-semibold">{eq?.code} — {eq?.name}</span>
                       <span className="text-gray-400 text-sm">·</span>
                       <span className="text-sm text-gray-600">{plan?.name} ({plan?.interval_value?.toLocaleString('pt-BR')}{trackingUnit})</span>
+                      {req.invoice_path && (
+                        <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium">
+                          <Paperclip className="w-3 h-3" /> NF anexada
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-400">
                       <span>{eq?.branches?.name}</span>
@@ -235,10 +314,11 @@ export default function SolicitacoesPage() {
               </div>
 
               {isOpen && (
-                <div className="px-5 pb-4 border-t border-gray-100">
+                <div className="px-5 pb-5 border-t border-gray-100">
                   {req.notes && (
                     <p className="text-sm text-gray-500 italic mt-3 mb-2">{req.notes}</p>
                   )}
+
                   <table className="w-full text-sm mt-3">
                     <thead>
                       <tr className="border-b border-gray-100">
@@ -278,6 +358,67 @@ export default function SolicitacoesPage() {
                       </tfoot>
                     )}
                   </table>
+
+                  {/* Invoice attachment — only for concluded requests */}
+                  {req.status === 'concluido' && (
+                    <div className="mt-4 pt-4 border-t border-gray-100">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1">
+                        <FileText className="w-3.5 h-3.5" /> Nota Fiscal
+                      </p>
+
+                      {uploadError && uploadTargetId === req.id && (
+                        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-2">{uploadError}</p>
+                      )}
+
+                      {req.invoice_path ? (
+                        <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+                          <Paperclip className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-emerald-800 truncate">
+                              {req.invoice_path.split('/').pop()}
+                            </p>
+                            <p className="text-xs text-emerald-600">Nota fiscal anexada</p>
+                          </div>
+                          <div className="flex gap-2 flex-shrink-0">
+                            {signedUrl ? (
+                              <a
+                                href={signedUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn-secondary py-1 px-2 text-emerald-700"
+                                title="Visualizar nota fiscal"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </a>
+                            ) : (
+                              <button className="btn-secondary py-1 px-2 text-gray-400" disabled>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              </button>
+                            )}
+                            <button
+                              className="btn-secondary py-1 px-2"
+                              title="Substituir arquivo"
+                              onClick={() => triggerUpload(req.id)}
+                              disabled={isUploading}
+                            >
+                              {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          className="flex items-center gap-2 border-2 border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50 rounded-xl px-4 py-3 text-sm text-gray-500 hover:text-blue-600 transition-colors w-full"
+                          onClick={() => triggerUpload(req.id)}
+                          disabled={isUploading}
+                        >
+                          {isUploading
+                            ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>
+                            : <><Paperclip className="w-4 h-4" /> Anexar nota fiscal (PDF, JPEG ou PNG — máx. 10 MB)</>
+                          }
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -325,7 +466,6 @@ export default function SolicitacoesPage() {
                 </div>
               )}
 
-              {/* Preview items */}
               {selPlan && (
                 <div className="border border-blue-100 rounded-xl overflow-hidden">
                   <div className="px-4 py-2 bg-blue-50 flex items-center gap-2">
@@ -405,8 +545,7 @@ export default function SolicitacoesPage() {
         const cfg = STATUS_CONFIG[printRequest.status] ?? STATUS_CONFIG.pendente
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" id="print-area">
-              {/* Print header */}
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between px-6 py-4 border-b print:hidden">
                 <h3 className="font-semibold text-lg">Solicitação de Compra</h3>
                 <div className="flex gap-2">
@@ -418,15 +557,11 @@ export default function SolicitacoesPage() {
               </div>
 
               <div className="px-8 py-6 space-y-5">
-                {/* Title */}
                 <div className="text-center pb-4 border-b border-gray-200">
                   <h2 className="text-xl font-bold text-gray-800">SOLICITAÇÃO DE COMPRA DE MATERIAL</h2>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Emitida em {formatDate(printRequest.created_at)}
-                  </p>
+                  <p className="text-sm text-gray-500 mt-1">Emitida em {formatDate(printRequest.created_at)}</p>
                 </div>
 
-                {/* Equipment + Plan info */}
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div className="space-y-2">
                     <div>
@@ -460,7 +595,6 @@ export default function SolicitacoesPage() {
                   )}
                 </div>
 
-                {/* Items table */}
                 <div>
                   <h3 className="font-semibold text-gray-700 mb-2 text-sm uppercase tracking-wide">Itens Solicitados</h3>
                   <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
@@ -502,7 +636,6 @@ export default function SolicitacoesPage() {
                   </table>
                 </div>
 
-                {/* Signature area */}
                 <div className="grid grid-cols-2 gap-8 pt-6 mt-4 border-t border-gray-200">
                   <div className="text-center">
                     <div className="border-b border-gray-400 mb-1 h-8" />
