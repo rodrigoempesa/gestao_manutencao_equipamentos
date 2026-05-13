@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Brand, EquipmentModel, MaintenancePlan, MaintenancePlanItem } from '@/lib/types'
 import { trackingLabel } from '@/lib/utils'
-import { BookOpen, Plus, Pencil, Trash2, X, ChevronDown, ChevronRight, Package, Hammer, ShoppingCart } from 'lucide-react'
+import { BookOpen, Plus, Pencil, Trash2, X, ChevronDown, ChevronRight, Package, Hammer, ShoppingCart, Search, ListChecks } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 interface Product { id: string; code: string; name: string; unit: string; unit_price: number }
@@ -44,6 +44,7 @@ export default function PlanosPage() {
   const [showPlanModal, setShowPlanModal] = useState(false)
   const [planForm, setPlanForm] = useState({ id: '', model_id: '', interval_value: '', name: '', description: '' })
 
+  // Single-item edit (pencil button on existing items)
   const [showItemModal, setShowItemModal] = useState(false)
   const [itemForm, setItemForm] = useState({
     id: '', plan_id: '',
@@ -51,6 +52,13 @@ export default function PlanosPage() {
     service_id: '',
     description: '', order_index: '0',
   })
+
+  // Batch items modal
+  const [showItemsModal, setShowItemsModal] = useState(false)
+  const [itemsModalPlan, setItemsModalPlan] = useState<MaintenancePlan | null>(null)
+  const [itemsSearch, setItemsSearch] = useState('')
+  interface DraftItem { checked: boolean; quantity: string; service_id: string; existing_id?: string }
+  const [draftItems, setDraftItems] = useState<Record<string, DraftItem>>({})
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -164,6 +172,76 @@ export default function PlanosPage() {
     loadData()
   }
 
+  function openItemsModal(plan: MaintenancePlan) {
+    const existing = planItems[plan.id] ?? []
+    const draft: Record<string, DraftItem> = {}
+    products.forEach(p => { draft[p.id] = { checked: false, quantity: '1', service_id: '' } })
+    existing.forEach(item => {
+      if (item.product_id) {
+        draft[item.product_id] = {
+          checked: true,
+          quantity: String(item.quantity),
+          service_id: item.service_id ?? '',
+          existing_id: item.id,
+        }
+      }
+    })
+    setDraftItems(draft)
+    setItemsModalPlan(plan)
+    setItemsSearch('')
+    setError('')
+    setShowItemsModal(true)
+  }
+
+  async function saveItemsBatch() {
+    if (!itemsModalPlan) return
+    setSaving(true); setError('')
+    const existing = planItems[itemsModalPlan.id] ?? []
+
+    const toDelete = existing
+      .filter(item => item.product_id && !draftItems[item.product_id]?.checked)
+      .map(item => item.id)
+
+    const toInsert = Object.entries(draftItems)
+      .filter(([, d]) => d.checked && !d.existing_id)
+      .map(([productId, d], idx) => {
+        const prod = products.find(p => p.id === productId)!
+        const svc = services.find(s => s.id === d.service_id)
+        return {
+          plan_id: itemsModalPlan!.id,
+          product_id: productId,
+          quantity: parseFloat(d.quantity) || 1,
+          service_id: d.service_id || null,
+          description: [prod.name, svc?.name].filter(Boolean).join(' + '),
+          order_index: existing.length + idx,
+        }
+      })
+
+    const toUpdate = Object.entries(draftItems)
+      .filter(([, d]) => d.checked && d.existing_id)
+      .map(([productId, d]) => {
+        const prod = products.find(p => p.id === productId)!
+        const svc = services.find(s => s.id === d.service_id)
+        return {
+          id: d.existing_id!,
+          quantity: parseFloat(d.quantity) || 1,
+          service_id: d.service_id || null,
+          description: [prod.name, svc?.name].filter(Boolean).join(' + '),
+        }
+      })
+
+    const ops: Promise<any>[] = []
+    if (toDelete.length) ops.push(supabase.from('maintenance_plan_items').delete().in('id', toDelete))
+    if (toInsert.length) ops.push(supabase.from('maintenance_plan_items').insert(toInsert))
+    for (const { id, ...data } of toUpdate) {
+      ops.push(supabase.from('maintenance_plan_items').update(data).eq('id', id))
+    }
+    const results = await Promise.all(ops)
+    const firstErr = results.find(r => r?.error)?.error
+    if (firstErr) { setError(firstErr.message); setSaving(false); return }
+    setShowItemsModal(false); setSaving(false); loadData()
+  }
+
   // Item cost = product cost + service cost (both per unit, service is per "execução")
   function itemCost(item: PlanItem) {
     const matCost = (item.products?.unit_price ?? 0) * item.quantity
@@ -269,8 +347,8 @@ export default function PlanosPage() {
                           <div className="flex gap-2" onClick={e => e.stopPropagation()}>
                             <button className="btn-secondary py-1 px-2" onClick={() => { setPlanForm({ id: plan.id, model_id: plan.model_id, interval_value: String(plan.interval_value), name: plan.name, description: plan.description ?? '' }); setError(''); setShowPlanModal(true) }}><Pencil className="w-3 h-3" /></button>
                             <button className="btn-secondary py-1 px-2 text-red-500" onClick={() => deletePlan(plan.id)}><Trash2 className="w-3 h-3" /></button>
-                            <button className="btn-secondary py-1 px-2 text-blue-600" onClick={() => { setItemForm({ id: '', plan_id: plan.id, product_id: '', quantity: '1', service_id: '', description: '', order_index: String(items.length) }); setError(''); setShowItemModal(true) }}>
-                              <Plus className="w-3 h-3" /> Item
+                            <button className="btn-secondary py-1 px-2 text-blue-600" onClick={() => openItemsModal(plan)}>
+                              <ListChecks className="w-3 h-3" /> Itens
                             </button>
                             <button
                               className="btn-secondary py-1 px-2 text-green-600"
@@ -587,6 +665,155 @@ export default function PlanosPage() {
                 <button type="submit" className="btn-primary" disabled={saving}>{saving ? '...' : 'Salvar Item'}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Batch Items Modal ── */}
+      {showItemsModal && itemsModalPlan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
+              <div>
+                <h3 className="font-semibold text-lg">Itens do Plano</h3>
+                <p className="text-xs text-gray-400 mt-0.5">{itemsModalPlan.name} · marque os produtos que fazem parte desta revisão</p>
+              </div>
+              <button onClick={() => setShowItemsModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+
+            {/* Search */}
+            <div className="px-6 py-3 border-b flex-shrink-0">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  className="input pl-9"
+                  placeholder="Filtrar produtos..."
+                  value={itemsSearch}
+                  onChange={e => setItemsSearch(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Product list */}
+            <div className="overflow-y-auto flex-1">
+              {(() => {
+                const filtered = products.filter(p =>
+                  p.name.toLowerCase().includes(itemsSearch.toLowerCase()) ||
+                  p.code.toLowerCase().includes(itemsSearch.toLowerCase())
+                )
+                if (filtered.length === 0) return (
+                  <p className="text-center text-gray-400 text-sm py-10">Nenhum produto encontrado</p>
+                )
+                return (
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-gray-50 border-b border-gray-100 z-10">
+                      <tr>
+                        <th className="w-10 px-4 py-2"></th>
+                        <th className="text-left px-2 py-2 text-xs font-semibold text-gray-500">Produto</th>
+                        <th className="text-center px-2 py-2 text-xs font-semibold text-gray-500 w-28">Quantidade</th>
+                        <th className="text-left px-2 py-2 text-xs font-semibold text-gray-500">Serviço</th>
+                        <th className="text-right px-4 py-2 text-xs font-semibold text-gray-500 w-28">Custo prev.</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {filtered.map(prod => {
+                        const draft = draftItems[prod.id] ?? { checked: false, quantity: '1', service_id: '' }
+                        const svc = services.find(s => s.id === draft.service_id)
+                        const cost = draft.checked
+                          ? (prod.unit_price * (parseFloat(draft.quantity) || 0)) + (svc?.unit_price ?? 0)
+                          : 0
+                        return (
+                          <tr
+                            key={prod.id}
+                            className={`transition-colors ${draft.checked ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                            onClick={() => setDraftItems(prev => ({
+                              ...prev,
+                              [prod.id]: { ...prev[prod.id], checked: !prev[prod.id]?.checked }
+                            }))}
+                          >
+                            <td className="px-4 py-3 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={draft.checked}
+                                readOnly
+                                className="w-4 h-4 accent-blue-600"
+                              />
+                            </td>
+                            <td className="px-2 py-3">
+                              <p className="font-medium text-gray-900">{prod.name}</p>
+                              <p className="text-xs text-gray-400">{prod.code} · {prod.unit} · {formatBRL(prod.unit_price)}/{prod.unit}</p>
+                            </td>
+                            <td className="px-2 py-3" onClick={e => e.stopPropagation()}>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  step="0.001"
+                                  min={0.001}
+                                  disabled={!draft.checked}
+                                  className="input font-mono text-center w-16 py-1 text-sm disabled:opacity-40"
+                                  value={draft.quantity}
+                                  onChange={e => setDraftItems(prev => ({
+                                    ...prev,
+                                    [prod.id]: { ...prev[prod.id], quantity: e.target.value }
+                                  }))}
+                                />
+                                <span className="text-xs text-gray-400">{prod.unit}</span>
+                              </div>
+                            </td>
+                            <td className="px-2 py-3" onClick={e => e.stopPropagation()}>
+                              <select
+                                disabled={!draft.checked}
+                                className="input py-1 text-sm disabled:opacity-40"
+                                value={draft.service_id}
+                                onChange={e => setDraftItems(prev => ({
+                                  ...prev,
+                                  [prod.id]: { ...prev[prod.id], service_id: e.target.value }
+                                }))}
+                              >
+                                <option value="">— sem serviço —</option>
+                                {services.map(s => (
+                                  <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono font-semibold text-green-700">
+                              {draft.checked && cost > 0 ? formatBRL(cost) : <span className="text-gray-300">—</span>}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                )
+              })()}
+            </div>
+
+            {/* Footer: total + save */}
+            <div className="px-6 py-4 border-t flex items-center justify-between gap-4 flex-shrink-0 bg-gray-50">
+              <div className="text-sm text-gray-600">
+                {(() => {
+                  const checkedCount = Object.values(draftItems).filter(d => d.checked).length
+                  const total = Object.entries(draftItems)
+                    .filter(([, d]) => d.checked)
+                    .reduce((sum, [productId, d]) => {
+                      const prod = products.find(p => p.id === productId)
+                      const svc = services.find(s => s.id === d.service_id)
+                      return sum + (prod?.unit_price ?? 0) * (parseFloat(d.quantity) || 0) + (svc?.unit_price ?? 0)
+                    }, 0)
+                  return (
+                    <span>
+                      <strong>{checkedCount}</strong> produto{checkedCount !== 1 ? 's' : ''} selecionado{checkedCount !== 1 ? 's' : ''}
+                      {total > 0 && <> · Custo previsto: <strong className="text-green-700">{formatBRL(total)}</strong></>}
+                    </span>
+                  )
+                })()}
+              </div>
+              {error && <p className="text-sm text-red-600">{error}</p>}
+              <div className="flex gap-3">
+                <button type="button" className="btn-secondary" onClick={() => setShowItemsModal(false)}>Cancelar</button>
+                <button className="btn-primary" onClick={saveItemsBatch} disabled={saving}>{saving ? 'Salvando...' : 'Salvar Itens'}</button>
+              </div>
+            </div>
           </div>
         </div>
       )}
