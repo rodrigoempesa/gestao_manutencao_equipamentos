@@ -81,7 +81,7 @@ export default function UsuariosPage() {
     if (!me) return
     setMyProfile(me)
 
-    let pQuery = supabase.from('profiles').select('*, branches(*), access_profiles(id, name)').order('name')
+    let pQuery = supabase.from('profiles').select('*, branches(*)').order('name')
     if (me.role === 'admin_local' && me.branch_id) {
       pQuery = pQuery.eq('branch_id', me.branch_id)
     }
@@ -341,7 +341,8 @@ export default function UsuariosPage() {
                 )}
                 {profiles.map(p => {
                   const rb = roleBadge(p.role)
-                  const customProfile = (p as any).access_profiles
+                  const accessProfileId = (p as any).access_profile_id
+                  const customProfile = accessProfileId ? accessProfiles.find(ap => ap.id === accessProfileId) : null
                   return (
                     <tr key={p.id} className={`hover:bg-gray-50 transition-colors ${!p.active ? 'opacity-50' : ''}`}>
                       <td className="table-cell font-medium">{p.name}</td>
