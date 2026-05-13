@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Equipment, EquipmentModel, Branch } from '@/lib/types'
 import { trackingLabel } from '@/lib/utils'
-import { ClipboardList, Plus, Pencil, ToggleLeft, ToggleRight, X } from 'lucide-react'
+import { ClipboardList, Plus, Pencil, ToggleLeft, ToggleRight, X, Search, SlidersHorizontal } from 'lucide-react'
 
 interface FormState {
   id: string
@@ -34,7 +34,11 @@ export default function EquipamentosPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [profile, setProfile] = useState<{ role: string; branch_id: string | null } | null>(null)
-  const [filter, setFilter] = useState('')
+  const [search, setSearch] = useState('')
+  const [filterBranch, setFilterBranch] = useState('')
+  const [filterBrand, setFilterBrand] = useState('')
+  const [filterModel, setFilterModel] = useState('')
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('active')
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -127,11 +131,41 @@ export default function EquipamentosPage() {
     loadData()
   }
 
-  const filtered = equipment.filter(e =>
-    filter === '' ||
-    e.code.toLowerCase().includes(filter.toLowerCase()) ||
-    e.name.toLowerCase().includes(filter.toLowerCase())
-  )
+  // Derived list of brands from loaded models
+  const brands = Array.from(
+    new Map(
+      models.map(m => [(m as any).brands?.id, (m as any).brands])
+    ).entries()
+  ).filter(([id]) => id).map(([, b]) => b as { id: string; name: string })
+
+  // Models filtered by selected brand
+  const filteredModels = filterBrand
+    ? models.filter(m => (m as any).brands?.id === filterBrand)
+    : models
+
+  const filtered = equipment.filter(e => {
+    const q = search.toLowerCase()
+    if (q && !(
+      e.code.toLowerCase().includes(q) ||
+      e.name.toLowerCase().includes(q) ||
+      (e.serial_number ?? '').toLowerCase().includes(q) ||
+      ((e.equipment_models as any)?.brands?.name ?? '').toLowerCase().includes(q) ||
+      (e.equipment_models?.name ?? '').toLowerCase().includes(q) ||
+      ((e as any).branches?.name ?? '').toLowerCase().includes(q)
+    )) return false
+    if (filterBranch && e.branch_id !== filterBranch) return false
+    if (filterBrand && (e.equipment_models as any)?.brands?.id !== filterBrand) return false
+    if (filterModel && e.model_id !== filterModel) return false
+    if (filterStatus === 'active' && !e.active) return false
+    if (filterStatus === 'inactive' && e.active) return false
+    return true
+  })
+
+  const hasFilters = search || filterBranch || filterBrand || filterModel || filterStatus !== 'active'
+
+  function clearFilters() {
+    setSearch(''); setFilterBranch(''); setFilterBrand(''); setFilterModel(''); setFilterStatus('active')
+  }
 
   const isAdmin = profile?.role === 'admin_geral' || profile?.role === 'admin_local'
 
@@ -139,28 +173,76 @@ export default function EquipamentosPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div>
           <h1 className="page-title flex items-center gap-2">
             <ClipboardList className="w-6 h-6 text-blue-600" />
             Equipamentos
           </h1>
-          <p className="text-gray-500 text-sm mt-1">{filtered.length} equipamentos</p>
+          <p className="text-gray-500 text-sm mt-1">{filtered.length} equipamento{filtered.length !== 1 ? 's' : ''}</p>
         </div>
-        <div className="flex gap-3">
-          <input
-            type="text"
-            className="input w-48"
-            placeholder="Buscar..."
-            value={filter}
-            onChange={e => setFilter(e.target.value)}
-          />
-          {isAdmin && (
-            <button className="btn-primary" onClick={openCreate}>
-              <Plus className="w-4 h-4" />
-              Novo
+        {isAdmin && (
+          <button className="btn-primary flex-shrink-0" onClick={openCreate}>
+            <Plus className="w-4 h-4" /> Novo
+          </button>
+        )}
+      </div>
+
+      {/* Filters */}
+      <div className="card py-4 px-5 space-y-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-gray-600">
+          <SlidersHorizontal className="w-4 h-4" />
+          Filtros
+          {hasFilters && (
+            <button onClick={clearFilters} className="ml-auto text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1">
+              <X className="w-3 h-3" /> Limpar filtros
             </button>
           )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          {/* Search */}
+          <div className="relative lg:col-span-2">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              className="input pl-9"
+              placeholder="Buscar por código, nome, S/N, marca..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+
+          {/* Filial */}
+          {profile?.role === 'admin_geral' && (
+            <select className="input" value={filterBranch} onChange={e => setFilterBranch(e.target.value)}>
+              <option value="">Todas as filiais</option>
+              {branches.map(b => <option key={b.id} value={b.id}>{b.name} – {b.city}/{b.state}</option>)}
+            </select>
+          )}
+
+          {/* Marca */}
+          <select
+            className="input"
+            value={filterBrand}
+            onChange={e => { setFilterBrand(e.target.value); setFilterModel('') }}
+          >
+            <option value="">Todas as marcas</option>
+            {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+
+          {/* Modelo */}
+          <select className="input" value={filterModel} onChange={e => setFilterModel(e.target.value)}>
+            <option value="">Todos os modelos</option>
+            {filteredModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+
+          {/* Status */}
+          <select className="input" value={filterStatus} onChange={e => setFilterStatus(e.target.value as any)}>
+            <option value="all">Todos os status</option>
+            <option value="active">Somente ativos</option>
+            <option value="inactive">Somente inativos</option>
+          </select>
         </div>
       </div>
 
