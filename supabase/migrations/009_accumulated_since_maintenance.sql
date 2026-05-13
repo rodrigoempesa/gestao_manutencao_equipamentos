@@ -3,8 +3,11 @@
 -- Execute no editor SQL do Supabase
 -- ============================================================
 
-create or replace view public.vw_equipment_status
-with (security_invoker = true)
+-- DROP necessário pois CREATE OR REPLACE não permite inserir coluna no meio da lista
+drop view if exists public.vw_equipment_status;
+
+create view public.vw_equipment_status
+  with (security_invoker = true)
 as
 select
   e.id,
