@@ -130,8 +130,20 @@ export default function SolicitacoesPage() {
     loadData(); setSaving(false)
   }
 
-  async function updateStatus(id: string, status: string) {
-    await supabase.from('purchase_requests').update({ status }).eq('id', id)
+  async function updateStatus(id: string, newStatus: string, req: PurchaseRequest) {
+    if (newStatus === req.status) return
+    if (req.status === 'concluido') return // imutável após conclusão
+
+    if (newStatus === 'aprovado') {
+      const items = req.purchase_request_items ?? []
+      const itemList = items.map(i => `• ${i.products?.code ?? '?'} — ${i.description}: ${i.quantity} ${i.unit}`).join('\n')
+      const confirmed = confirm(
+        `Aprovar esta solicitação irá atualizar o estoque dos seguintes produtos e marcar como Concluído:\n\n${itemList}\n\nDeseja continuar?`
+      )
+      if (!confirmed) return
+    }
+
+    await supabase.from('purchase_requests').update({ status: newStatus }).eq('id', id)
     loadData()
   }
 
@@ -199,15 +211,19 @@ export default function SolicitacoesPage() {
                   <span className={`${cfg.badge} flex items-center gap-1 text-xs`}>
                     {cfg.icon} {cfg.label}
                   </span>
-                  <select
-                    className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-600"
-                    value={req.status}
-                    onChange={e => updateStatus(req.id, e.target.value)}
-                  >
-                    {Object.entries(STATUS_CONFIG).map(([k, v]) => (
-                      <option key={k} value={k}>{v.label}</option>
-                    ))}
-                  </select>
+                  {req.status === 'concluido' ? (
+                    <span className="text-xs text-gray-400 italic px-2">Estoque atualizado</span>
+                  ) : req.status === 'cancelado' ? null : (
+                    <select
+                      className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-600"
+                      value={req.status}
+                      onChange={e => updateStatus(req.id, e.target.value, req)}
+                    >
+                      <option value="pendente">Pendente</option>
+                      <option value="aprovado">Aprovar (atualiza estoque)</option>
+                      <option value="cancelado">Cancelar</option>
+                    </select>
+                  )}
                   <button
                     className="btn-secondary py-1 px-2"
                     title="Imprimir"
