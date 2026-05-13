@@ -26,6 +26,7 @@ interface RequestItem {
 interface PurchaseRequest {
   id: string; status: string; notes: string | null; created_at: string
   invoice_path?: string | null
+  final_amount?: number | null
   equipment?: any; maintenance_plans?: any
   purchase_request_items?: RequestItem[]
 }
@@ -46,6 +47,7 @@ export default function SolicitacoesPage() {
   const searchParams = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadTargetId, setUploadTargetId] = useState<string | null>(null)
+  const didAutoOpen = useRef(false)
 
   const [requests, setRequests] = useState<PurchaseRequest[]>([])
   const [equipment, setEquipment] = useState<Equipment[]>([])
@@ -67,6 +69,11 @@ export default function SolicitacoesPage() {
   const [filteredPlans, setFilteredPlans] = useState<MaintenancePlan[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  // Approval modal state
+  const [showApproval, setShowApproval] = useState(false)
+  const [approvalTarget, setApprovalTarget] = useState<PurchaseRequest | null>(null)
+  const [finalAmount, setFinalAmount] = useState('')
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -92,12 +99,14 @@ export default function SolicitacoesPage() {
 
   useEffect(() => { loadData() }, [loadData])
 
-  // Auto-open create modal if ?plan= param is present
+  // Auto-open create modal if ?plan= param is present (only once)
   useEffect(() => {
+    if (didAutoOpen.current) return
     const planId = searchParams.get('plan')
     if (planId && plans.length > 0) {
       setSelPlan(planId)
       setShowCreate(true)
+      didAutoOpen.current = true
     }
   }, [searchParams, plans])
 
@@ -151,19 +160,32 @@ export default function SolicitacoesPage() {
     loadData(); setSaving(false)
   }
 
+  function openApproval(req: PurchaseRequest) {
+    const estimated = requestTotal(req)
+    setApprovalTarget(req)
+    setFinalAmount(estimated > 0 ? estimated.toFixed(2).replace('.', ',') : '')
+    setShowApproval(true)
+  }
+
+  async function confirmApproval() {
+    if (!approvalTarget) return
+    const raw = finalAmount.replace(/\./g, '').replace(',', '.')
+    const amount = parseFloat(raw)
+    setSaving(true)
+    await supabase.from('purchase_requests').update({
+      status: 'aprovado',
+      final_amount: isNaN(amount) ? null : amount,
+    }).eq('id', approvalTarget.id)
+    setShowApproval(false)
+    setApprovalTarget(null)
+    setSaving(false)
+    loadData()
+  }
+
   async function updateStatus(id: string, newStatus: string, req: PurchaseRequest) {
     if (newStatus === req.status) return
     if (req.status === 'concluido') return
-
-    if (newStatus === 'aprovado') {
-      const items = req.purchase_request_items ?? []
-      const itemList = items.map(i => `• ${i.products?.code ?? '?'} — ${i.description}: ${i.quantity} ${i.unit}`).join('\n')
-      const confirmed = confirm(
-        `Aprovar esta solicitação irá atualizar o estoque dos seguintes produtos e marcar como Concluído:\n\n${itemList}\n\nDeseja continuar?`
-      )
-      if (!confirmed) return
-    }
-
+    if (newStatus === 'aprovado') { openApproval(req); return }
     await supabase.from('purchase_requests').update({ status: newStatus }).eq('id', id)
     loadData()
   }
@@ -282,7 +304,8 @@ export default function SolicitacoesPage() {
                       <span>{formatDate(req.created_at)}</span>
                       <span>·</span>
                       <span>{(req.purchase_request_items ?? []).length} item(ns)</span>
-                      {total > 0 && <><span>·</span><span className="text-green-700 font-semibold">{formatBRL(total)}</span></>}
+                      {total > 0 && <><span>·</span><span className="text-gray-500">Estimado: {formatBRL(total)}</span></>}
+                      {req.final_amount != null && <><span>·</span><span className="text-green-700 font-semibold">Final: {formatBRL(req.final_amount)}</span></>}
                     </div>
                   </div>
                 </div>
@@ -349,12 +372,34 @@ export default function SolicitacoesPage() {
                         </tr>
                       ))}
                     </tbody>
-                    {total > 0 && (
+                    {(total > 0 || req.final_amount != null) && (
                       <tfoot>
-                        <tr className="border-t border-gray-200">
-                          <td colSpan={5} className="pt-2 text-right text-xs font-semibold text-gray-600">Total estimado:</td>
-                          <td className="pt-2 text-right font-bold text-green-700 font-mono">{formatBRL(total)}</td>
-                        </tr>
+                        {total > 0 && (
+                          <tr className="border-t border-gray-100">
+                            <td colSpan={5} className="pt-2 text-right text-xs font-semibold text-gray-500">Total estimado:</td>
+                            <td className="pt-2 text-right font-semibold text-gray-500 font-mono">{formatBRL(total)}</td>
+                          </tr>
+                        )}
+                        {req.final_amount != null && (
+                          <tr className="border-t border-gray-200">
+                            <td colSpan={5} className="pt-2 text-right text-xs font-semibold text-gray-700">Valor final da compra:</td>
+                            <td className="pt-2 text-right font-bold text-green-700 font-mono">{formatBRL(req.final_amount)}</td>
+                          </tr>
+                        )}
+                        {req.final_amount != null && total > 0 && (() => {
+                          const diff = req.final_amount - total
+                          if (diff === 0) return null
+                          return (
+                            <tr>
+                              <td colSpan={5} className="pb-1 text-right text-xs text-gray-400">
+                                {diff < 0 ? `Desconto: ${formatBRL(Math.abs(diff))}` : `Acréscimo: ${formatBRL(diff)}`}
+                              </td>
+                              <td className={`pb-1 text-right text-xs font-semibold font-mono ${diff < 0 ? 'text-emerald-600' : 'text-orange-500'}`}>
+                                ({diff < 0 ? '-' : '+'}{formatBRL(Math.abs(diff))})
+                              </td>
+                            </tr>
+                          )
+                        })()}
                       </tfoot>
                     )}
                   </table>
@@ -646,6 +691,95 @@ export default function SolicitacoesPage() {
                     <p className="text-xs text-gray-500">Aprovação</p>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ── Approval Modal ── */}
+      {showApproval && approvalTarget && (() => {
+        const estimated = requestTotal(approvalTarget)
+        const raw = finalAmount.replace(/\./g, '').replace(',', '.')
+        const final = parseFloat(raw)
+        const diff = !isNaN(final) && estimated > 0 ? final - estimated : null
+        const items = approvalTarget.purchase_request_items ?? []
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+              <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
+                <div>
+                  <h3 className="font-semibold text-lg">Confirmar Aprovação</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Informe o valor final — o estoque será atualizado automaticamente</p>
+                </div>
+                <button onClick={() => setShowApproval(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+              </div>
+
+              <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+                {/* Items summary */}
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                  <div className="bg-gray-50 px-4 py-2 flex items-center gap-2 border-b border-gray-100">
+                    <Package className="w-4 h-4 text-gray-500" />
+                    <span className="text-sm font-semibold text-gray-700">Itens que terão estoque atualizado</span>
+                  </div>
+                  <div className="divide-y divide-gray-50 max-h-48 overflow-y-auto">
+                    {items.map(item => (
+                      <div key={item.id} className="flex items-center justify-between px-4 py-2 text-sm">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-mono text-xs text-blue-700 font-semibold flex-shrink-0">{item.products?.code ?? '—'}</span>
+                          <span className="text-gray-700 truncate">{item.description}</span>
+                        </div>
+                        <span className="font-mono text-xs text-gray-500 flex-shrink-0 ml-2">+{item.quantity} {item.unit}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {estimated > 0 && (
+                    <div className="bg-gray-50 px-4 py-2 border-t border-gray-100 flex justify-between text-sm">
+                      <span className="text-gray-500">Total estimado</span>
+                      <span className="font-semibold font-mono text-gray-700">{formatBRL(estimated)}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Final amount input */}
+                <div>
+                  <label className="label">Valor Final da Compra *</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
+                    <input
+                      className="input pl-9 font-mono text-lg"
+                      placeholder="0,00"
+                      value={finalAmount}
+                      onChange={e => setFinalAmount(e.target.value)}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Informe o valor real pago. Você pode inserir um valor diferente do estimado para registrar desconto ou acréscimo.
+                  </p>
+                </div>
+
+                {/* Diff indicator */}
+                {diff !== null && diff !== 0 && (
+                  <div className={`flex items-center justify-between rounded-xl px-4 py-3 text-sm border ${
+                    diff < 0
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-orange-50 border-orange-200 text-orange-800'
+                  }`}>
+                    <span>{diff < 0 ? '🏷 Desconto aplicado' : '📈 Acréscimo'}</span>
+                    <span className="font-bold font-mono">{diff < 0 ? '-' : '+'}{formatBRL(Math.abs(diff))}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="px-6 py-4 border-t flex gap-3 justify-end flex-shrink-0 bg-gray-50">
+                <button className="btn-secondary" onClick={() => setShowApproval(false)}>Cancelar</button>
+                <button
+                  className="btn-primary bg-green-600 hover:bg-green-700 border-green-600"
+                  onClick={confirmApproval}
+                  disabled={saving}
+                >
+                  {saving ? 'Aprovando...' : 'Confirmar Aprovação'}
+                </button>
               </div>
             </div>
           </div>
