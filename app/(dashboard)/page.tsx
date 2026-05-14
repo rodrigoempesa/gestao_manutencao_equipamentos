@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import type { EquipmentStatus } from '@/lib/types'
-import { getMaintenanceStatus, getDaysUntilMaintenance, formatReading } from '@/lib/types'
+import { getMaintenanceStatus, getDaysUntilMaintenance, getUpcomingWarning, formatReading } from '@/lib/types'
 import { formatDate } from '@/lib/utils'
 import { AlertTriangle, CheckCircle, Clock, Wrench, Activity } from 'lucide-react'
 import EquipmentStatusTable from './components/EquipmentStatusTable'
@@ -112,6 +112,7 @@ export default async function DashboardPage() {
               .map(eq => {
                 const status = getMaintenanceStatus(eq)
                 const days = getDaysUntilMaintenance(eq)
+                const upcoming = getUpcomingWarning(eq)
                 return (
                   <div
                     key={eq.id}
@@ -135,9 +136,21 @@ export default async function DashboardPage() {
                       </div>
                       <p className="text-xs text-gray-500 mt-0.5">{eq.branch_name} · {eq.brand_name} {eq.model_name}</p>
                       <p className="text-xs text-gray-600 mt-1">
-                        {eq.next_maintenance_plan_name && `Próx: ${eq.next_maintenance_plan_name} · `}
+                        {eq.next_maintenance_plan_name && `Revisão vencida: ${eq.next_maintenance_plan_name} · `}
                         Leitura atual: {formatReading(eq.current_reading, eq.tracking_type)}
                       </p>
+                      {upcoming && (
+                        <div className="mt-2 flex items-start gap-1.5 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+                          <AlertTriangle className="w-3.5 h-3.5 text-orange-500 flex-shrink-0 mt-0.5" />
+                          <p className="text-xs text-orange-800">
+                            <strong>Atenção:</strong> faltam apenas{' '}
+                            <strong>{formatReading(upcoming.remaining, eq.tracking_type)}</strong>{' '}
+                            para a <strong>{upcoming.planName}</strong>{' '}
+                            (em {formatReading(upcoming.threshold, eq.tracking_type)}).
+                            Considere antecipar o pedido de materiais desta revisão.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
