@@ -234,10 +234,10 @@ export default function LeiturasPage() {
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l)
     if (lines.length < 2) return
     const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const delimiter = lines[0].includes(';') ? ';' : ','
 
     const parsed: CsvRow[] = lines.slice(1).map(line => {
-      // simple comma split (no quoted fields needed here)
-      const cols = line.split(',').map(c => c.trim())
+      const cols = line.split(delimiter).map(c => c.trim())
       const equipmentId = cols[0] ?? ''
       const dateRaw     = cols[1] ?? ''
       const value       = cols[2] ?? ''
