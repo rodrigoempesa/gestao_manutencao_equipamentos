@@ -2,9 +2,9 @@
 
 import { useState, useMemo } from 'react'
 import type { EquipmentStatus } from '@/lib/types'
-import { getMaintenanceStatus, getDaysUntilMaintenance, formatReading } from '@/lib/types'
+import { getMaintenanceStatus, getDaysUntilMaintenance, getUpcomingWarning, formatReading } from '@/lib/types'
 import { formatDate } from '@/lib/utils'
-import { Search, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, X, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react'
 
 const PAGE_SIZE = 15
 
@@ -138,6 +138,11 @@ export default function EquipmentStatusTable({
             {paginated.map(eq => {
               const status = getMaintenanceStatus(eq)
               const days = getDaysUntilMaintenance(eq)
+              const upcoming = getUpcomingWarning(eq)
+              // Relative interval = threshold − last maintenance reading
+              const relInterval = eq.next_maintenance_threshold !== null && eq.last_maintenance_reading !== null
+                ? eq.next_maintenance_threshold - eq.last_maintenance_reading
+                : eq.next_maintenance_threshold // fallback for new equipment (no prior service)
               return (
                 <tr key={eq.id} className="hover:bg-gray-50 transition-colors">
                   <td className="table-cell">
@@ -152,12 +157,11 @@ export default function EquipmentStatusTable({
                     {formatReading(eq.current_reading, eq.tracking_type)}
                   </td>
                   <td className="table-cell">
-                    {eq.accumulated_since_maintenance !== null ? (
+                    {eq.accumulated_since_maintenance !== null && relInterval ? (
                       <span className={`font-mono font-semibold ${
-                        eq.next_maintenance_interval &&
-                        eq.accumulated_since_maintenance >= eq.next_maintenance_interval * 0.9
+                        eq.accumulated_since_maintenance >= relInterval * 0.9
                           ? 'text-red-600'
-                          : eq.accumulated_since_maintenance >= eq.next_maintenance_interval! * 0.7
+                          : eq.accumulated_since_maintenance >= relInterval * 0.7
                           ? 'text-yellow-600'
                           : 'text-gray-700'
                       }`}>
@@ -183,7 +187,9 @@ export default function EquipmentStatusTable({
                     {eq.next_maintenance_plan_name ? (
                       <div>
                         <p className="text-sm font-medium">{eq.next_maintenance_plan_name}</p>
-                        <p className="text-xs text-gray-400">em {formatReading(eq.next_maintenance_interval, eq.tracking_type)}</p>
+                        <p className="text-xs text-gray-400">
+                          limite: {formatReading(eq.next_maintenance_threshold, eq.tracking_type)}
+                        </p>
                       </div>
                     ) : <span className="text-gray-400">-</span>}
                   </td>
@@ -194,7 +200,17 @@ export default function EquipmentStatusTable({
                       </span>
                     ) : <span className="text-gray-400">-</span>}
                   </td>
-                  <td className="table-cell">{statusMap[status]}</td>
+                  <td className="table-cell">
+                    <div className="space-y-1">
+                      {statusMap[status]}
+                      {upcoming && (
+                        <div className="flex items-center gap-1 text-orange-600" title={`Faltam ${formatReading(upcoming.remaining, eq.tracking_type)} para ${upcoming.planName} (limite: ${formatReading(upcoming.threshold, eq.tracking_type)})`}>
+                          <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                          <span className="text-xs font-medium">Próx. revisão aprox.</span>
+                        </div>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               )
             })}

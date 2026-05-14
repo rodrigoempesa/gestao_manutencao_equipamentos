@@ -122,24 +122,57 @@ export interface EquipmentStatus {
   last_maintenance_plan_name: string | null
   next_maintenance_interval: number | null
   next_maintenance_plan_name: string | null
+  next_maintenance_threshold: number | null
+  upcoming_maintenance_interval: number | null
+  upcoming_maintenance_plan_name: string | null
+  upcoming_maintenance_threshold: number | null
   accumulated_since_maintenance: number | null
 }
 
 export type MaintenanceStatus = 'overdue' | 'warning' | 'ok' | 'no_data'
 
+// Uses the adjusted threshold (accounts for late services) rather than
+// the raw plan interval_value, so delays propagate forward correctly.
 export function getMaintenanceStatus(eq: EquipmentStatus): MaintenanceStatus {
-  if (!eq.current_reading || !eq.next_maintenance_interval) return 'no_data'
-  if (eq.current_reading >= eq.next_maintenance_interval) return 'overdue'
+  const threshold = eq.next_maintenance_threshold
+  if (!eq.current_reading || !threshold) return 'no_data'
+  if (eq.current_reading >= threshold) return 'overdue'
   if (!eq.daily_avg || eq.daily_avg <= 0) return 'ok'
-  const daysLeft = (eq.next_maintenance_interval - eq.current_reading) / eq.daily_avg
+  const daysLeft = (threshold - eq.current_reading) / eq.daily_avg
   if (daysLeft <= 15) return 'overdue'
   if (daysLeft <= 30) return 'warning'
   return 'ok'
 }
 
 export function getDaysUntilMaintenance(eq: EquipmentStatus): number | null {
-  if (!eq.current_reading || !eq.next_maintenance_interval || !eq.daily_avg || eq.daily_avg <= 0) return null
-  return Math.round((eq.next_maintenance_interval - eq.current_reading) / eq.daily_avg)
+  const threshold = eq.next_maintenance_threshold
+  if (!eq.current_reading || !threshold || !eq.daily_avg || eq.daily_avg <= 0) return null
+  return Math.round((threshold - eq.current_reading) / eq.daily_avg)
+}
+
+// Returns info about the upcoming (next-next) service when the equipment is
+// overdue for the current service but already approaching the one after it.
+// Triggers when the reading has crossed ≥50% of the gap between the two thresholds.
+export function getUpcomingWarning(eq: EquipmentStatus): {
+  planName: string
+  threshold: number
+  remaining: number
+} | null {
+  if (!eq.current_reading || !eq.next_maintenance_threshold) return null
+  if (eq.current_reading < eq.next_maintenance_threshold) return null // not overdue
+  if (!eq.upcoming_maintenance_threshold || !eq.upcoming_maintenance_plan_name) return null
+
+  const gap = eq.upcoming_maintenance_threshold - eq.next_maintenance_threshold
+  if (gap <= 0) return null
+
+  const passed = eq.current_reading - eq.next_maintenance_threshold
+  if (passed / gap < 0.5) return null // not yet halfway to the next service
+
+  return {
+    planName: eq.upcoming_maintenance_plan_name,
+    threshold: eq.upcoming_maintenance_threshold,
+    remaining: eq.upcoming_maintenance_threshold - eq.current_reading,
+  }
 }
 
 export function formatReading(value: number | null, type: TrackingType): string {
