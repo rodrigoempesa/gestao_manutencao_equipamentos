@@ -94,7 +94,7 @@ export default function EquipmentStatusTable({
             >
               <option value="">Todas as filiais</option>
               {branches.map(([id, b]) => (
-                <option key={id} value={id}>{b.name} — {b.city}/{b.state}</option>
+                <option key={id} value={id}>{b.name}</option>
               ))}
             </select>
           )}
