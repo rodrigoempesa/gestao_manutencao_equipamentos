@@ -6,6 +6,7 @@ import type { EquipmentStatus } from '@/lib/types'
 import { getMaintenanceStatus, getDaysUntilMaintenance, formatReading } from '@/lib/types'
 import { formatDate } from '@/lib/utils'
 import { AlertTriangle, CheckCircle, Clock, Wrench, Activity } from 'lucide-react'
+import EquipmentStatusTable from './components/EquipmentStatusTable'
 
 export default async function DashboardPage() {
   const supabase = createClient()
@@ -146,120 +147,7 @@ export default async function DashboardPage() {
       )}
 
       {/* Equipment Status Table */}
-      <div className="card p-0 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="section-title">Status dos Equipamentos</h2>
-          <span className="text-sm text-gray-400">{total} equipamentos</span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[800px]">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr>
-                <th className="table-header">Código / Nome</th>
-                <th className="table-header">Filial</th>
-                <th className="table-header">Leitura Atual</th>
-                <th className="table-header">Acum. desde rev.</th>
-                <th className="table-header">Última Leitura</th>
-                <th className="table-header">Média/dia</th>
-                <th className="table-header">Última Manut.</th>
-                <th className="table-header">Próx. Manut.</th>
-                <th className="table-header">Previsão</th>
-                <th className="table-header">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {list.length === 0 && (
-                <tr>
-                  <td colSpan={10} className="table-cell text-center text-gray-400 py-12">
-                    Nenhum equipamento cadastrado
-                  </td>
-                </tr>
-              )}
-              {list.map(eq => {
-                const status = getMaintenanceStatus(eq)
-                const days = getDaysUntilMaintenance(eq)
-                const statusMap = {
-                  overdue: <span className="badge-red">Vencido</span>,
-                  warning: <span className="badge-yellow">Atenção</span>,
-                  ok: <span className="badge-green">OK</span>,
-                  no_data: <span className="badge-gray">Sem dados</span>,
-                }
-                return (
-                  <tr key={eq.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="table-cell">
-                      <p className="font-semibold text-gray-900">{eq.code}</p>
-                      <p className="text-xs text-gray-500 truncate max-w-[140px]">{eq.name}</p>
-                    </td>
-                    <td className="table-cell">
-                      <p className="text-sm">{eq.branch_name}</p>
-                      <p className="text-xs text-gray-400">{eq.branch_city}/{eq.branch_state}</p>
-                    </td>
-                    <td className="table-cell font-mono font-semibold">
-                      {formatReading(eq.current_reading, eq.tracking_type)}
-                    </td>
-                    <td className="table-cell">
-                      {eq.accumulated_since_maintenance !== null ? (
-                        <span className={`font-mono font-semibold ${
-                          eq.next_maintenance_interval &&
-                          eq.accumulated_since_maintenance >= eq.next_maintenance_interval * 0.9
-                            ? 'text-red-600'
-                            : eq.accumulated_since_maintenance >= eq.next_maintenance_interval! * 0.7
-                            ? 'text-yellow-600'
-                            : 'text-gray-700'
-                        }`}>
-                          {formatReading(eq.accumulated_since_maintenance, eq.tracking_type)}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
-                    </td>
-                    <td className="table-cell text-gray-500">
-                      {formatDate(eq.last_reading_date)}
-                    </td>
-                    <td className="table-cell text-gray-500">
-                      {eq.daily_avg
-                        ? formatReading(eq.daily_avg, eq.tracking_type)
-                        : '-'}
-                    </td>
-                    <td className="table-cell">
-                      {eq.last_maintenance_date ? (
-                        <div>
-                          <p className="text-sm">{formatDate(eq.last_maintenance_date)}</p>
-                          <p className="text-xs text-gray-400">{eq.last_maintenance_plan_name}</p>
-                        </div>
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
-                    </td>
-                    <td className="table-cell">
-                      {eq.next_maintenance_plan_name ? (
-                        <div>
-                          <p className="text-sm font-medium">{eq.next_maintenance_plan_name}</p>
-                          <p className="text-xs text-gray-400">
-                            em {formatReading(eq.next_maintenance_interval, eq.tracking_type)}
-                          </p>
-                        </div>
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
-                    </td>
-                    <td className="table-cell">
-                      {days !== null ? (
-                        <span className={days < 0 ? 'text-red-600 font-semibold' : 'text-gray-700'}>
-                          {days < 0 ? `${Math.abs(days)}d vencido` : `${days} dias`}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
-                    </td>
-                    <td className="table-cell">{statusMap[status]}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <EquipmentStatusTable list={list} isAdminGeral={profile.role === 'admin_geral'} />
 
       {/* Recent Readings */}
       {recentReadings && recentReadings.length > 0 && (
