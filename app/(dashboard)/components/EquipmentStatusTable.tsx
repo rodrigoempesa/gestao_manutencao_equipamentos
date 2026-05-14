@@ -20,9 +20,13 @@ export default function EquipmentStatusTable({
   const [page, setPage] = useState(1)
 
   const branches = useMemo(() => {
-    const map = new Map<string, string>()
-    list.forEach(e => { if (e.branch_id && e.branch_name) map.set(e.branch_id, e.branch_name) })
-    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'))
+    const map = new Map<string, { name: string; city: string; state: string }>()
+    list.forEach(e => {
+      if (e.branch_id && e.branch_name) {
+        map.set(e.branch_id, { name: e.branch_name, city: e.branch_city ?? '', state: e.branch_state ?? '' })
+      }
+    })
+    return Array.from(map.entries()).sort((a, b) => a[1].name.localeCompare(b[1].name, 'pt-BR'))
   }, [list])
 
   const filtered = useMemo(() => {
@@ -91,8 +95,8 @@ export default function EquipmentStatusTable({
               onChange={e => handleBranch(e.target.value)}
             >
               <option value="">Todas as filiais</option>
-              {branches.map(([id, name]) => (
-                <option key={id} value={id}>{name}</option>
+              {branches.map(([id, b]) => (
+                <option key={id} value={id}>{b.name} — {b.city}/{b.state}</option>
               ))}
             </select>
           )}
