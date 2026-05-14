@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Package, Plus, Pencil, ToggleLeft, ToggleRight, X, AlertTriangle } from 'lucide-react'
+import { Package, Plus, Pencil, ToggleLeft, ToggleRight, X, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface Product {
   id: string
@@ -31,6 +31,7 @@ interface FormState {
 }
 
 const UNITS = ['un', 'L', 'mL', 'kg', 'g', 'm', 'cm', 'cx', 'par', 'rolo', 'lt', 'galão', 'tambor']
+const PAGE_SIZE = 20
 
 const emptyForm = (): FormState => ({
   id: '', code: '', name: '', unit: 'un',
@@ -51,6 +52,7 @@ export default function ProdutosPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [filter, setFilter] = useState('')
+  const [page, setPage] = useState(1)
   const [showStockModal, setShowStockModal] = useState<Product | null>(null)
   const [stockAdjust, setStockAdjust] = useState('')
   const [stockType, setStockType] = useState<'add' | 'remove' | 'set'>('add')
@@ -108,12 +110,16 @@ export default function ProdutosPage() {
     loadData()
   }
 
-  const filtered = products.filter(p =>
+  const filtered = useMemo(() => products.filter(p =>
     !filter ||
     p.name.toLowerCase().includes(filter.toLowerCase()) ||
     p.code.toLowerCase().includes(filter.toLowerCase()) ||
     (p.category ?? '').toLowerCase().includes(filter.toLowerCase())
-  )
+  ), [products, filter])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
   const lowStock = products.filter(p => p.active && p.current_stock <= p.min_stock && p.min_stock > 0)
 
@@ -130,7 +136,7 @@ export default function ProdutosPage() {
           <p className="text-gray-500 text-sm mt-1">{products.length} produtos cadastrados</p>
         </div>
         <div className="flex gap-3">
-          <input type="text" className="input w-48" placeholder="Buscar..." value={filter} onChange={e => setFilter(e.target.value)} />
+          <input type="text" className="input w-48" placeholder="Buscar..." value={filter} onChange={e => { setFilter(e.target.value); setPage(1) }} />
           <button className="btn-primary" onClick={() => { setForm(emptyForm()); setError(''); setShowForm(true) }}>
             <Plus className="w-4 h-4" /> Novo Produto
           </button>
@@ -167,7 +173,7 @@ export default function ProdutosPage() {
               {filtered.length === 0 && (
                 <tr><td colSpan={9} className="table-cell text-center text-gray-400 py-12">Nenhum produto encontrado</td></tr>
               )}
-              {filtered.map(p => {
+              {paginated.map(p => {
                 const belowMin = p.active && p.min_stock > 0 && p.current_stock <= p.min_stock
                 return (
                   <tr key={p.id} className={`hover:bg-gray-50 transition-colors ${!p.active ? 'opacity-50' : ''}`}>
@@ -214,6 +220,46 @@ export default function ProdutosPage() {
             )}
           </table>
         </div>
+
+        {totalPages > 1 && (
+          <div className="px-6 py-3 border-t border-gray-100 flex items-center justify-between bg-gray-50">
+            <p className="text-sm text-gray-500">
+              Página {safePage} de {totalPages} · {filtered.length} produto{filtered.length !== 1 ? 's' : ''}
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                className="btn-secondary py-1 px-2 disabled:opacity-40"
+                disabled={safePage === 1}
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(p => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+                .reduce<(number | '...')[]>((acc, p, i, arr) => {
+                  if (i > 0 && (p as number) - (arr[i - 1] as number) > 1) acc.push('...')
+                  acc.push(p)
+                  return acc
+                }, [])
+                .map((p, i) =>
+                  p === '...'
+                    ? <span key={`e-${i}`} className="px-2 text-gray-400 text-sm">…</span>
+                    : <button
+                        key={p}
+                        className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${p === safePage ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-200'}`}
+                        onClick={() => setPage(p as number)}
+                      >{p}</button>
+                )}
+              <button
+                className="btn-secondary py-1 px-2 disabled:opacity-40"
+                disabled={safePage === totalPages}
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Form Modal */}
