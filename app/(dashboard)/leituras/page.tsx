@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Equipment, Reading } from '@/lib/types'
 import { formatReading } from '@/lib/types'
 import { todayISO, trackingLabel, formatDate } from '@/lib/utils'
-import { Gauge, Save, Check, AlertTriangle, History, ListPlus, Plus, Trash2, X, CheckCircle2 } from 'lucide-react'
+import { Gauge, Save, Check, AlertTriangle, History, ListPlus, Plus, Trash2, X, CheckCircle2, Upload, Download } from 'lucide-react'
 
 interface EquipmentRow {
   equipment: Equipment
@@ -47,6 +47,24 @@ export default function LeiturasPage() {
   const [batchSaving, setBatchSaving] = useState(false)
   const [batchDone, setBatchDone] = useState(false)
   const [batchResult, setBatchResult] = useState({ ok: 0, errors: 0 })
+
+  // CSV import state
+  interface CsvRow {
+    _key: string
+    equipmentId: string
+    date: string      // ISO yyyy-mm-dd
+    dateRaw: string   // original dd/mm/yyyy
+    value: string
+    errors: string[]
+    status: 'pending' | 'ok' | 'error'
+    statusMsg: string
+  }
+  const [showCsvImport, setShowCsvImport] = useState(false)
+  const [csvRows, setCsvRows] = useState<CsvRow[]>([])
+  const [csvSaving, setCsvSaving] = useState(false)
+  const [csvDone, setCsvDone] = useState(false)
+  const [csvResult, setCsvResult] = useState({ ok: 0, errors: 0 })
+  const csvFileRef = useRef<HTMLInputElement>(null)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -179,6 +197,97 @@ export default function LeiturasPage() {
     setHistoryModal({ equipment, readings: data ?? [] })
   }
 
+  function parseDMY(s: string): string | null {
+    const m = s.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+    if (!m) return null
+    const [, d, mo, y] = m
+    const iso = `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`
+    const dt = new Date(iso)
+    if (isNaN(dt.getTime())) return null
+    return iso
+  }
+
+  function openCsvImport() {
+    setCsvRows([]); setCsvDone(false); setCsvResult({ ok: 0, errors: 0 })
+    setShowCsvImport(true)
+  }
+
+  function downloadReadingsTemplate() {
+    const blob = new Blob(
+      ['EQUIPAMENTO,DATA,LEITURA\n' + 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx,01/01/2026,1250.5\n'],
+      { type: 'text/csv;charset=utf-8;' }
+    )
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = 'template_leituras.csv'
+    a.click(); URL.revokeObjectURL(url)
+  }
+
+  function handleCsvFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (!file) return
+    const reader = new FileReader()
+    reader.onload = ev => processCsv(ev.target?.result as string)
+    reader.readAsText(file, 'UTF-8')
+    e.target.value = ''
+  }
+
+  function processCsv(text: string) {
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l)
+    if (lines.length < 2) return
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+    const parsed: CsvRow[] = lines.slice(1).map(line => {
+      // simple comma split (no quoted fields needed here)
+      const cols = line.split(',').map(c => c.trim())
+      const equipmentId = cols[0] ?? ''
+      const dateRaw     = cols[1] ?? ''
+      const value       = cols[2] ?? ''
+      const errors: string[] = []
+
+      if (!equipmentId || !uuidRe.test(equipmentId)) errors.push('UUID inválido')
+      const iso = parseDMY(dateRaw)
+      if (!iso) errors.push('Data inválida (use dd/mm/aaaa)')
+      if (!value || isNaN(parseFloat(value))) errors.push('Leitura inválida')
+
+      return {
+        _key: Math.random().toString(36).slice(2),
+        equipmentId, dateRaw, date: iso ?? '', value, errors,
+        status: 'pending' as const, statusMsg: '',
+      }
+    })
+    setCsvRows(parsed); setCsvDone(false)
+  }
+
+  async function runCsvImport() {
+    setCsvSaving(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setCsvSaving(false); return }
+
+    let okCount = 0; let errCount = 0
+    const updated: CsvRow[] = [...csvRows]
+
+    for (let i = 0; i < updated.length; i++) {
+      const row = updated[i]
+      if (row.errors.length > 0) { errCount++; updated[i] = { ...row, status: 'error', statusMsg: row.errors.join('; ') }; continue }
+
+      const { error } = await supabase.from('readings').upsert({
+        equipment_id: row.equipmentId,
+        reading_value: parseFloat(row.value),
+        reading_date: row.date,
+        created_by: user.id,
+      }, { onConflict: 'equipment_id,reading_date' })
+
+      if (error) {
+        updated[i] = { ...row, status: 'error', statusMsg: error.message }; errCount++
+      } else {
+        updated[i] = { ...row, status: 'ok', statusMsg: '' }; okCount++
+      }
+    }
+
+    setCsvRows(updated); setCsvResult({ ok: okCount, errors: errCount })
+    setCsvDone(true); setCsvSaving(false)
+    if (okCount > 0) loadData()
+  }
+
   function openBatch() {
     setBatchEquipId('')
     setBatchEntries([newEntry(todayISO())])
@@ -290,10 +399,16 @@ export default function LeiturasPage() {
         </div>
         <div className="flex items-end gap-3">
           {isAdmin && (
-            <button className="btn-secondary" onClick={openBatch}>
-              <ListPlus className="w-4 h-4" /> Leituras em Lote
-            </button>
+            <>
+              <button className="btn-secondary" onClick={openCsvImport}>
+                <Upload className="w-4 h-4" /> Importar CSV
+              </button>
+              <button className="btn-secondary" onClick={openBatch}>
+                <ListPlus className="w-4 h-4" /> Leituras em Lote
+              </button>
+            </>
           )}
+          <input ref={csvFileRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleCsvFile} />
           <div>
             <label className="label">Data da leitura</label>
             <input
@@ -601,6 +716,112 @@ export default function LeiturasPage() {
                     disabled={batchSaving || batchEntries.every(e => !e.value)}
                   >
                     {batchSaving ? 'Salvando...' : `Salvar ${batchEntries.length} leitura${batchEntries.length !== 1 ? 's' : ''}`}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* CSV Import Modal — admin_geral only */}
+      {showCsvImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
+              <div>
+                <h3 className="font-semibold text-lg flex items-center gap-2">
+                  <Upload className="w-5 h-5 text-blue-600" /> Importar Leituras via CSV
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">Colunas: EQUIPAMENTO (UUID), DATA (dd/mm/aaaa), LEITURA</p>
+              </div>
+              <button onClick={() => setShowCsvImport(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+              {/* Actions */}
+              <div className="flex gap-3 flex-wrap">
+                <button className="btn-secondary" onClick={downloadReadingsTemplate}>
+                  <Download className="w-4 h-4" /> Baixar template
+                </button>
+                <button className="btn-secondary" onClick={() => csvFileRef.current?.click()} disabled={csvDone}>
+                  <Upload className="w-4 h-4" /> Selecionar arquivo
+                </button>
+              </div>
+
+              {/* Result banner */}
+              {csvDone && (
+                <div className={`rounded-xl px-4 py-3 flex items-center gap-3 ${csvResult.errors === 0 ? 'bg-green-50 border border-green-200' : 'bg-yellow-50 border border-yellow-200'}`}>
+                  <CheckCircle2 className={`w-5 h-5 flex-shrink-0 ${csvResult.errors === 0 ? 'text-green-600' : 'text-yellow-500'}`} />
+                  <p className="text-sm font-medium">
+                    {csvResult.ok} leitura{csvResult.ok !== 1 ? 's' : ''} importada{csvResult.ok !== 1 ? 's' : ''}
+                    {csvResult.errors > 0 && ` · ${csvResult.errors} com erro`}
+                  </p>
+                </div>
+              )}
+
+              {/* Preview table */}
+              {csvRows.length > 0 && (
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-100">
+                      <tr>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500">UUID Equipamento</th>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 w-32">Data</th>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 w-28">Leitura</th>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 w-32">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {csvRows.map(row => (
+                        <tr key={row._key} className={
+                          row.status === 'ok' ? 'bg-green-50' :
+                          row.status === 'error' || row.errors.length > 0 ? 'bg-red-50' : 'bg-white'
+                        }>
+                          <td className="px-4 py-2 font-mono text-xs text-gray-600 truncate max-w-[200px]">{row.equipmentId || '—'}</td>
+                          <td className="px-4 py-2 text-xs">{row.dateRaw || '—'}</td>
+                          <td className="px-4 py-2 font-mono text-xs">{row.value || '—'}</td>
+                          <td className="px-4 py-2 text-xs">
+                            {row.status === 'ok' ? (
+                              <span className="text-green-700 flex items-center gap-1"><Check className="w-3 h-3" /> Importado</span>
+                            ) : row.status === 'error' ? (
+                              <span className="text-red-600 flex items-center gap-1"><AlertTriangle className="w-3 h-3 flex-shrink-0" />{row.statusMsg}</span>
+                            ) : row.errors.length > 0 ? (
+                              <span className="text-red-600 flex items-center gap-1"><AlertTriangle className="w-3 h-3 flex-shrink-0" />{row.errors.join('; ')}</span>
+                            ) : (
+                              <span className="text-gray-400">Pendente</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {csvRows.length === 0 && !csvDone && (
+                <div className="border-2 border-dashed border-gray-200 rounded-xl py-12 text-center text-gray-400 text-sm">
+                  Selecione um arquivo CSV para visualizar a prévia
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t flex-shrink-0 bg-gray-50 flex justify-between items-center gap-4">
+              <p className="text-xs text-gray-400">
+                {csvRows.length > 0 && !csvDone
+                  ? `${csvRows.filter(r => r.errors.length === 0).length} válidas · ${csvRows.filter(r => r.errors.length > 0).length} com erro`
+                  : ''}
+              </p>
+              <div className="flex gap-3">
+                <button className="btn-secondary" onClick={() => setShowCsvImport(false)}>
+                  {csvDone ? 'Fechar' : 'Cancelar'}
+                </button>
+                {!csvDone && csvRows.length > 0 && (
+                  <button
+                    className="btn-primary"
+                    onClick={runCsvImport}
+                    disabled={csvSaving || csvRows.every(r => r.errors.length > 0)}
+                  >
+                    {csvSaving ? 'Importando...' : `Importar ${csvRows.filter(r => r.errors.length === 0).length} leitura${csvRows.filter(r => r.errors.length === 0).length !== 1 ? 's' : ''}`}
                   </button>
                 )}
               </div>
