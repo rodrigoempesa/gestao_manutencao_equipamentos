@@ -39,7 +39,7 @@ export default function PlanosPage() {
   const [brandForm, setBrandForm] = useState({ id: '', name: '' })
 
   const [showModelModal, setShowModelModal] = useState(false)
-  const [modelForm, setModelForm] = useState({ id: '', brand_id: '', name: '', tracking_type: 'hours' })
+  const [modelForm, setModelForm] = useState({ id: '', brand_id: '', name: '', tracking_type: 'hours', cycle_duration: '' })
 
   const [showPlanModal, setShowPlanModal] = useState(false)
   const [planForm, setPlanForm] = useState({ id: '', model_id: '', interval_value: '', name: '', description: '' })
@@ -113,7 +113,12 @@ export default function PlanosPage() {
 
   async function saveModel(e: React.FormEvent) {
     e.preventDefault(); setSaving(true); setError('')
-    const payload = { brand_id: modelForm.brand_id, name: modelForm.name.trim(), tracking_type: modelForm.tracking_type }
+    const payload = {
+      brand_id: modelForm.brand_id,
+      name: modelForm.name.trim(),
+      tracking_type: modelForm.tracking_type,
+      cycle_duration: modelForm.cycle_duration ? parseInt(modelForm.cycle_duration) : null,
+    }
     const { error: err } = modelForm.id
       ? await supabase.from('equipment_models').update(payload).eq('id', modelForm.id)
       : await supabase.from('equipment_models').insert(payload)
@@ -295,7 +300,7 @@ export default function PlanosPage() {
       <div className="card p-0 overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="section-title">Modelos e Planos</h2>
-          <button className="btn-primary" onClick={() => { setModelForm({ id: '', brand_id: '', name: '', tracking_type: 'hours' }); setError(''); setShowModelModal(true) }}>
+          <button className="btn-primary" onClick={() => { setModelForm({ id: '', brand_id: '', name: '', tracking_type: 'hours', cycle_duration: '' }); setError(''); setShowModelModal(true) }}>
             <Plus className="w-4 h-4" /> Novo Modelo
           </button>
         </div>
@@ -316,12 +321,15 @@ export default function PlanosPage() {
                       <span className="text-gray-400">–</span>
                       <span className="font-medium">{model.name}</span>
                       <span className="badge-blue">{trackingLabel(model.tracking_type)}</span>
+                      {model.cycle_duration && (
+                        <span className="text-xs text-gray-400">ciclo: {model.cycle_duration.toLocaleString('pt-BR')}{model.tracking_type === 'hours' ? 'h' : ' km'}</span>
+                      )}
                     </div>
                     <p className="text-xs text-gray-400">{modelPlans.length} plano(s)</p>
                   </div>
                 </div>
                 <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                  <button className="btn-secondary py-1 px-2" onClick={() => { setModelForm({ id: model.id, brand_id: model.brand_id, name: model.name, tracking_type: model.tracking_type }); setError(''); setShowModelModal(true) }}><Pencil className="w-4 h-4" /></button>
+                  <button className="btn-secondary py-1 px-2" onClick={() => { setModelForm({ id: model.id, brand_id: model.brand_id, name: model.name, tracking_type: model.tracking_type, cycle_duration: model.cycle_duration ? String(model.cycle_duration) : '' }); setError(''); setShowModelModal(true) }}><Pencil className="w-4 h-4" /></button>
                   <button className="btn-secondary py-1 px-2 text-red-500" onClick={() => deleteModel(model.id)}><Trash2 className="w-4 h-4" /></button>
                   <button className="btn-primary py-1 px-2" onClick={() => { setPlanForm({ id: '', model_id: model.id, interval_value: '', name: '', description: '' }); setError(''); setShowPlanModal(true) }}>
                     <Plus className="w-4 h-4" /> Plano
@@ -495,6 +503,18 @@ export default function PlanosPage() {
                   <option value="hours">Horímetro (horas)</option>
                   <option value="km">Odômetro (km)</option>
                 </select>
+              </div>
+              <div>
+                <label className="label">Duração do Ciclo ({modelForm.tracking_type === 'hours' ? 'horas' : 'km'})</label>
+                <input
+                  type="number"
+                  className="input"
+                  value={modelForm.cycle_duration}
+                  onChange={e => setModelForm(f => ({ ...f, cycle_duration: e.target.value }))}
+                  placeholder="Ex: 6000"
+                  min={1}
+                />
+                <p className="text-xs text-gray-400 mt-1">Após completar esse total, o ciclo reinicia do primeiro plano</p>
               </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
               <div className="flex gap-3 justify-end">
