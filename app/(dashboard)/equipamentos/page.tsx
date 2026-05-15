@@ -14,13 +14,14 @@ interface FormState {
   branch_id: string
   year: string
   serial_number: string
+  initial_reading: string
   notes: string
   active: boolean
 }
 
 const emptyForm = (): FormState => ({
   id: '', code: '', name: '', model_id: '', branch_id: '',
-  year: '', serial_number: '', notes: '', active: true,
+  year: '', serial_number: '', initial_reading: '', notes: '', active: true,
 })
 
 interface ImportRow {
@@ -135,6 +136,7 @@ export default function EquipamentosPage() {
       branch_id: eq.branch_id,
       year: eq.year ? String(eq.year) : '',
       serial_number: eq.serial_number ?? '',
+      initial_reading: eq.initial_reading !== null ? String(eq.initial_reading) : '',
       notes: eq.notes ?? '',
       active: eq.active,
     })
@@ -154,6 +156,7 @@ export default function EquipamentosPage() {
       branch_id: form.branch_id,
       year: form.year ? parseInt(form.year) : null,
       serial_number: form.serial_number.trim() || null,
+      initial_reading: form.initial_reading !== '' ? parseFloat(form.initial_reading) : null,
       notes: form.notes.trim() || null,
       active: form.active,
     }
@@ -564,6 +567,19 @@ export default function EquipamentosPage() {
                 <div>
                   <label className="label">Número de Série</label>
                   <input className="input" value={form.serial_number} onChange={e => setForm(f => ({ ...f, serial_number: e.target.value }))} placeholder="Opcional" />
+                </div>
+                <div>
+                  <label className="label">Horímetro / Odômetro Inicial</label>
+                  <input
+                    type="number"
+                    className="input"
+                    value={form.initial_reading}
+                    onChange={e => setForm(f => ({ ...f, initial_reading: e.target.value }))}
+                    placeholder="Leitura no momento do cadastro"
+                    min={0}
+                    step="0.1"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Usado como base para o cálculo das próximas revisões preventivas</p>
                 </div>
                 <div>
                   <label className="label">Observações</label>

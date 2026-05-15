@@ -64,6 +64,7 @@ export interface Equipment {
   branch_id: string
   year: number | null
   serial_number: string | null
+  initial_reading: number | null
   notes: string | null
   active: boolean
   created_at: string
