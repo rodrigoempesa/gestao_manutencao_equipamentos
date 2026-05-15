@@ -7,7 +7,7 @@
 
 update public.maintenance_plan_items pli
 set
-  product_id = v.prod_id,
+  product_id = p.id,
   quantity   = v.qty
 from (values
   ('John Deere - 750J - 500h', 'AT300487', 1),
