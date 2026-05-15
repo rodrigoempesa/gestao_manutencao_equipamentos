@@ -71,6 +71,7 @@ export default function EquipamentosPage() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<FormState>(emptyForm())
+  const [lastMaintenanceReading, setLastMaintenanceReading] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [profile, setProfile] = useState<{ role: string; branch_id: string | null } | null>(null)
@@ -123,11 +124,12 @@ export default function EquipamentosPage() {
       ...emptyForm(),
       branch_id: profile?.role !== 'admin_geral' && profile?.branch_id ? profile.branch_id : '',
     })
+    setLastMaintenanceReading(null)
     setError('')
     setShowForm(true)
   }
 
-  function openEdit(eq: Equipment) {
+  async function openEdit(eq: Equipment) {
     setForm({
       id: eq.id,
       code: eq.code,
@@ -140,6 +142,15 @@ export default function EquipamentosPage() {
       notes: eq.notes ?? '',
       active: eq.active,
     })
+    // Busca a leitura da última manutenção realizada
+    const { data: lastMaint } = await supabase
+      .from('maintenance_records')
+      .select('reading_at_maintenance')
+      .eq('equipment_id', eq.id)
+      .order('reading_at_maintenance', { ascending: false })
+      .limit(1)
+      .single()
+    setLastMaintenanceReading(lastMaint?.reading_at_maintenance ?? eq.initial_reading ?? null)
     setError('')
     setShowForm(true)
   }
@@ -568,18 +579,36 @@ export default function EquipamentosPage() {
                   <label className="label">Número de Série</label>
                   <input className="input" value={form.serial_number} onChange={e => setForm(f => ({ ...f, serial_number: e.target.value }))} placeholder="Opcional" />
                 </div>
-                <div>
-                  <label className="label">Horímetro / Odômetro Inicial</label>
-                  <input
-                    type="number"
-                    className="input"
-                    value={form.initial_reading}
-                    onChange={e => setForm(f => ({ ...f, initial_reading: e.target.value }))}
-                    placeholder="Leitura no momento do cadastro"
-                    min={0}
-                    step="0.1"
-                  />
-                  <p className="text-xs text-gray-400 mt-1">Usado como base para o cálculo das próximas revisões preventivas</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="label">Horímetro / Odômetro Inicial</label>
+                    <input
+                      type="number"
+                      className="input"
+                      value={form.initial_reading}
+                      onChange={e => setForm(f => ({ ...f, initial_reading: e.target.value }))}
+                      placeholder="Ex: 1250"
+                      min={0}
+                      step="0.1"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Leitura no momento do cadastro</p>
+                  </div>
+                  {form.id && (
+                    <div>
+                      <label className="label">Leitura na Última Revisão</label>
+                      <input
+                        type="text"
+                        className="input bg-gray-50 text-gray-500 cursor-not-allowed"
+                        value={lastMaintenanceReading !== null ? String(lastMaintenanceReading) : '—'}
+                        readOnly
+                      />
+                      <p className="text-xs text-gray-400 mt-1">
+                        {lastMaintenanceReading !== null
+                          ? 'Da última manutenção registrada'
+                          : 'Nenhuma manutenção registrada'}
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="label">Observações</label>
