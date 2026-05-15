@@ -403,9 +403,6 @@ export default function PlanosPage() {
                                           </div>
                                         ) : <span className="text-gray-300 text-xs">—</span>}
                                       </td>
-                                      <td className="py-2 text-right font-mono text-sm">
-                                        {item.products ? `${item.quantity} ${item.products.unit}` : '—'}
-                                      </td>
                                       <td className="py-2">
                                         {item.services ? (
                                           <span className="text-xs text-purple-700 font-medium">{item.services.name}</span>
