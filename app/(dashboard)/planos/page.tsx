@@ -376,11 +376,11 @@ export default function PlanosPage() {
                                 <thead>
                                   <tr className="border-b border-gray-100">
                                     <th className="text-left pb-2 text-xs font-semibold text-gray-500 w-6">#</th>
-                                    <th className="text-left pb-2 text-xs font-semibold text-gray-500 w-52">
+                                    <th className="text-left pb-2 text-xs font-semibold text-gray-500 w-72">
                                       <span className="flex items-center gap-1"><Package className="w-3 h-3" /> Produto</span>
                                     </th>
                                     <th className="text-left pb-2 text-xs font-semibold text-gray-500">Descrição</th>
-                                    <th className="text-right pb-2 text-xs font-semibold text-gray-500 w-20 whitespace-nowrap">Qtd</th>
+                                    <th className="text-right pb-2 pr-8 text-xs font-semibold text-gray-500 w-24 whitespace-nowrap">Qtd</th>
                                     <th className="text-left pb-2 text-xs font-semibold text-gray-500 w-36">
                                       <span className="flex items-center gap-1"><Hammer className="w-3 h-3" /> Serviço</span>
                                     </th>
@@ -403,7 +403,7 @@ export default function PlanosPage() {
                                       <td className="py-2 pr-4 align-top">
                                         <p className="text-sm">{item.description}</p>
                                       </td>
-                                      <td className="py-2 text-right font-mono text-sm whitespace-nowrap align-top">
+                                      <td className="py-2 pr-8 text-right font-mono text-sm whitespace-nowrap align-top">
                                         {item.products ? `${item.quantity} ${item.products.unit}` : '—'}
                                       </td>
                                       <td className="py-2 align-top">
