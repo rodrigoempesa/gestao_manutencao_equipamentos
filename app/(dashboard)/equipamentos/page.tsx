@@ -15,13 +15,14 @@ interface FormState {
   year: string
   serial_number: string
   initial_reading: string
+  initial_reading_date: string
   notes: string
   active: boolean
 }
 
 const emptyForm = (): FormState => ({
   id: '', code: '', name: '', model_id: '', branch_id: '',
-  year: '', serial_number: '', initial_reading: '', notes: '', active: true,
+  year: '', serial_number: '', initial_reading: '', initial_reading_date: '', notes: '', active: true,
 })
 
 interface ImportRow {
@@ -72,6 +73,7 @@ export default function EquipamentosPage() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<FormState>(emptyForm())
   const [lastMaintenanceReading, setLastMaintenanceReading] = useState<number | null>(null)
+  const [lastMaintenanceDate, setLastMaintenanceDate] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [profile, setProfile] = useState<{ role: string; branch_id: string | null } | null>(null)
@@ -125,6 +127,7 @@ export default function EquipamentosPage() {
       branch_id: profile?.role !== 'admin_geral' && profile?.branch_id ? profile.branch_id : '',
     })
     setLastMaintenanceReading(null)
+    setLastMaintenanceDate(null)
     setError('')
     setShowForm(true)
   }
@@ -139,18 +142,20 @@ export default function EquipamentosPage() {
       year: eq.year ? String(eq.year) : '',
       serial_number: eq.serial_number ?? '',
       initial_reading: eq.initial_reading !== null ? String(eq.initial_reading) : '',
+      initial_reading_date: eq.initial_reading_date ?? '',
       notes: eq.notes ?? '',
       active: eq.active,
     })
-    // Busca a leitura da última manutenção realizada
+    // Busca leitura e data da última manutenção realizada
     const { data: lastMaint } = await supabase
       .from('maintenance_records')
-      .select('reading_at_maintenance')
+      .select('reading_at_maintenance, maintenance_date')
       .eq('equipment_id', eq.id)
       .order('reading_at_maintenance', { ascending: false })
       .limit(1)
       .single()
     setLastMaintenanceReading(lastMaint?.reading_at_maintenance ?? eq.initial_reading ?? null)
+    setLastMaintenanceDate(lastMaint?.maintenance_date ?? eq.initial_reading_date ?? null)
     setError('')
     setShowForm(true)
   }
@@ -168,6 +173,7 @@ export default function EquipamentosPage() {
       year: form.year ? parseInt(form.year) : null,
       serial_number: form.serial_number.trim() || null,
       initial_reading: form.initial_reading !== '' ? parseFloat(form.initial_reading) : null,
+      initial_reading_date: form.initial_reading_date || null,
       notes: form.notes.trim() || null,
       active: form.active,
     }
@@ -591,9 +597,19 @@ export default function EquipamentosPage() {
                       min={0}
                       step="0.1"
                     />
-                    <p className="text-xs text-gray-400 mt-1">Leitura no momento do cadastro</p>
                   </div>
-                  {form.id && (
+                  <div>
+                    <label className="label">Data do Horímetro Inicial</label>
+                    <input
+                      type="date"
+                      className="input"
+                      value={form.initial_reading_date}
+                      onChange={e => setForm(f => ({ ...f, initial_reading_date: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                {form.id && (
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="label">Leitura na Última Revisão</label>
                       <input
@@ -602,27 +618,18 @@ export default function EquipamentosPage() {
                         value={lastMaintenanceReading !== null ? String(lastMaintenanceReading) : '—'}
                         readOnly
                       />
-                      <p className="text-xs text-gray-400 mt-1">
-                        {lastMaintenanceReading !== null
-                          ? 'Da última manutenção registrada'
-                          : 'Nenhuma manutenção registrada'}
-                      </p>
                     </div>
-                  )}
-                </div>
-                <div>
-                  <label className="label">Horímetro / Odômetro Inicial</label>
-                  <input
-                    type="number"
-                    className="input"
-                    value={form.initial_reading}
-                    onChange={e => setForm(f => ({ ...f, initial_reading: e.target.value }))}
-                    placeholder="Leitura no momento do cadastro"
-                    min={0}
-                    step="0.1"
-                  />
-                  <p className="text-xs text-gray-400 mt-1">Usado como base para o cálculo das próximas revisões preventivas</p>
-                </div>
+                    <div>
+                      <label className="label">Data da Última Revisão</label>
+                      <input
+                        type="text"
+                        className="input bg-gray-50 text-gray-500 cursor-not-allowed"
+                        value={lastMaintenanceDate ?? '—'}
+                        readOnly
+                      />
+                    </div>
+                  </div>
+                )}
                 <div>
                   <label className="label">Observações</label>
                   <textarea className="input" rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Opcional" />
