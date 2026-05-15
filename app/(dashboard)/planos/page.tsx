@@ -376,11 +376,11 @@ export default function PlanosPage() {
                                 <thead>
                                   <tr className="border-b border-gray-100">
                                     <th className="text-left pb-2 text-xs font-semibold text-gray-500 w-6">#</th>
-                                    <th className="text-left pb-2 text-xs font-semibold text-gray-500">Descrição</th>
-                                    <th className="text-left pb-2 text-xs font-semibold text-gray-500">
+                                    <th className="text-left pb-2 text-xs font-semibold text-gray-500 w-full">Descrição</th>
+                                    <th className="text-right pb-2 text-xs font-semibold text-gray-500 w-20">Qtd</th>
+                                    <th className="text-left pb-2 text-xs font-semibold text-gray-500 w-48">
                                       <span className="flex items-center gap-1"><Package className="w-3 h-3" /> Produto</span>
                                     </th>
-                                    <th className="text-right pb-2 text-xs font-semibold text-gray-500">Qtd</th>
                                     <th className="text-left pb-2 text-xs font-semibold text-gray-500">
                                       <span className="flex items-center gap-1"><Hammer className="w-3 h-3" /> Serviço</span>
                                     </th>
@@ -392,8 +392,11 @@ export default function PlanosPage() {
                                   {items.map((item, idx) => (
                                     <tr key={item.id} className="group">
                                       <td className="py-2 text-gray-400">{idx + 1}</td>
-                                      <td className="py-2 max-w-[160px]">
-                                        <p className="truncate">{item.description}</p>
+                                      <td className="py-2">
+                                        <p>{item.description}</p>
+                                      </td>
+                                      <td className="py-2 text-right font-mono text-sm">
+                                        {item.products ? `${item.quantity} ${item.products.unit}` : '—'}
                                       </td>
                                       <td className="py-2">
                                         {item.products ? (
@@ -402,9 +405,6 @@ export default function PlanosPage() {
                                             <p className="text-xs text-gray-400">{item.products.name}</p>
                                           </div>
                                         ) : <span className="text-gray-300 text-xs">—</span>}
-                                      </td>
-                                      <td className="py-2 text-right font-mono text-sm">
-                                        {item.products ? `${item.quantity} ${item.products.unit}` : '—'}
                                       </td>
                                       <td className="py-2">
                                         {item.services ? (
