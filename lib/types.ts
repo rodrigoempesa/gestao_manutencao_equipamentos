@@ -65,6 +65,7 @@ export interface Equipment {
   year: number | null
   serial_number: string | null
   initial_reading: number | null
+  initial_reading_date: string | null
   notes: string | null
   active: boolean
   created_at: string
