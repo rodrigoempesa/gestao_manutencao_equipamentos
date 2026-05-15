@@ -406,6 +406,12 @@ export default function PlanosPage() {
                                       <td className="py-2 text-right font-mono text-sm whitespace-nowrap">
                                         {item.products ? `${item.quantity} ${item.products.unit}` : '—'}
                                       </td>
+                                      <td className="py-2 pr-4">
+                                        <p className="text-sm">{item.description}</p>
+                                      </td>
+                                      <td className="py-2 text-right font-mono text-sm whitespace-nowrap">
+                                        {item.products ? `${item.quantity} ${item.products.unit}` : '—'}
+                                      </td>
                                       <td className="py-2 text-right font-mono text-sm whitespace-nowrap">
                                         {item.products ? `${item.quantity} ${item.products.unit}` : '—'}
                                       </td>
