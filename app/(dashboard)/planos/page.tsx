@@ -376,7 +376,7 @@ export default function PlanosPage() {
                                 <thead>
                                   <tr className="border-b border-gray-100">
                                     <th className="text-left pb-2 text-xs font-semibold text-gray-500 w-6">#</th>
-                                    <th className="text-left pb-2 text-xs font-semibold text-gray-500 w-36">
+                                    <th className="text-left pb-2 text-xs font-semibold text-gray-500 w-52">
                                       <span className="flex items-center gap-1"><Package className="w-3 h-3" /> Produto</span>
                                     </th>
                                     <th className="text-left pb-2 text-xs font-semibold text-gray-500">Descrição</th>
@@ -392,11 +392,11 @@ export default function PlanosPage() {
                                   {items.map((item, idx) => (
                                     <tr key={item.id} className="group">
                                       <td className="py-2 text-gray-400">{idx + 1}</td>
-                                      <td className="py-2 w-36">
+                                      <td className="py-2 w-52">
                                         {item.products ? (
-                                          <div className="min-w-0">
+                                          <div>
                                             <p className="text-xs font-medium text-blue-700 whitespace-nowrap">{item.products.code}</p>
-                                            <p className="text-xs text-gray-400 truncate max-w-[130px]">{item.products.name}</p>
+                                            <p className="text-xs text-gray-400 leading-tight">{item.products.name}</p>
                                           </div>
                                         ) : <span className="text-gray-300 text-xs">—</span>}
                                       </td>
