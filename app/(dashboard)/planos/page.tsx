@@ -391,8 +391,8 @@ export default function PlanosPage() {
                                 <tbody className="divide-y divide-gray-50">
                                   {items.map((item, idx) => (
                                     <tr key={item.id} className="group">
-                                      <td className="py-2 text-gray-400">{idx + 1}</td>
-                                      <td className="py-2 w-52">
+                                      <td className="py-2 text-gray-400 align-top">{idx + 1}</td>
+                                      <td className="py-2 align-top">
                                         {item.products ? (
                                           <div>
                                             <p className="text-xs font-medium text-blue-700 whitespace-nowrap">{item.products.code}</p>
@@ -400,30 +400,21 @@ export default function PlanosPage() {
                                           </div>
                                         ) : <span className="text-gray-300 text-xs">—</span>}
                                       </td>
-                                      <td className="py-2 pr-4">
+                                      <td className="py-2 pr-4 align-top">
                                         <p className="text-sm">{item.description}</p>
                                       </td>
-                                      <td className="py-2 text-right font-mono text-sm whitespace-nowrap">
+                                      <td className="py-2 text-right font-mono text-sm whitespace-nowrap align-top">
                                         {item.products ? `${item.quantity} ${item.products.unit}` : '—'}
                                       </td>
-                                      <td className="py-2 pr-4">
-                                        <p className="text-sm">{item.description}</p>
-                                      </td>
-                                      <td className="py-2 text-right font-mono text-sm whitespace-nowrap">
-                                        {item.products ? `${item.quantity} ${item.products.unit}` : '—'}
-                                      </td>
-                                      <td className="py-2 text-right font-mono text-sm whitespace-nowrap">
-                                        {item.products ? `${item.quantity} ${item.products.unit}` : '—'}
-                                      </td>
-                                      <td className="py-2">
+                                      <td className="py-2 align-top">
                                         {item.services ? (
                                           <span className="text-xs text-purple-700 font-medium">{item.services.name}</span>
                                         ) : <span className="text-gray-300 text-xs">—</span>}
                                       </td>
-                                      <td className="py-2 text-right font-mono font-semibold text-green-700">
+                                      <td className="py-2 text-right font-mono font-semibold text-green-700 align-top">
                                         {itemCost(item) > 0 ? formatBRL(itemCost(item)) : '—'}
                                       </td>
-                                      <td className="py-2">
+                                      <td className="py-2 align-top">
                                         <div className="opacity-0 group-hover:opacity-100 flex gap-1 justify-end">
                                           <button className="text-gray-400 hover:text-blue-600" onClick={() => { setItemForm({ id: item.id, plan_id: item.plan_id, product_id: item.product_id ?? '', quantity: String(item.quantity), service_id: item.service_id ?? '', description: item.description, order_index: String(item.order_index) }); setError(''); setShowItemModal(true) }}><Pencil className="w-3.5 h-3.5" /></button>
                                           <button className="text-gray-400 hover:text-red-600" onClick={() => deleteItem(item.id)}><Trash2 className="w-3.5 h-3.5" /></button>
@@ -435,7 +426,7 @@ export default function PlanosPage() {
                                 {cost > 0 && (
                                   <tfoot>
                                     <tr className="border-t border-gray-200">
-                                      <td colSpan={5} className="pt-2 text-right text-xs font-semibold text-gray-600">Custo total previsto:</td>
+                                      <td colSpan={4} className="pt-2 text-right text-xs font-semibold text-gray-600">Custo total previsto:</td>
                                       <td className="pt-2 text-right font-bold text-green-700 font-mono">{formatBRL(cost)}</td>
                                       <td />
                                     </tr>
