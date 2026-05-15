@@ -33,6 +33,7 @@ export interface EquipmentModel {
   brand_id: string
   name: string
   tracking_type: TrackingType
+  cycle_duration: number | null
   created_at: string
   brands?: Brand
 }
@@ -113,6 +114,7 @@ export interface EquipmentStatus {
   model_id: string
   model_name: string
   tracking_type: TrackingType
+  cycle_duration: number | null
   brand_id: string
   brand_name: string
   current_reading: number | null
