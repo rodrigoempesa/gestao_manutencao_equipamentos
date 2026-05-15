@@ -145,31 +145,34 @@ left join public.maintenance_plans lm_plan on lm_plan.id = lm.plan_id
 --   Se o ciclo terminou (último plano >= cycle_duration ou não há próximo), retorna o
 --   primeiro plano do ciclo com is_same_cycle = false.
 left join lateral (
-  select
-    mp.interval_value,
-    mp.name,
-    true as is_same_cycle
-  from public.maintenance_plans mp
-  where mp.model_id = e.model_id
-    -- Mesmo ciclo: próximo intervalo maior que o último plano feito
-    and mp.interval_value > coalesce(lm_plan.interval_value, 0)
-    -- Não é novo ciclo: o último plano não fechou o ciclo
-    and (em.cycle_duration is null or coalesce(lm_plan.interval_value, 0) < em.cycle_duration)
-  order by mp.interval_value asc
-  limit 1
+  select * from (
+    select
+      mp.interval_value,
+      mp.name,
+      true as is_same_cycle
+    from public.maintenance_plans mp
+    where mp.model_id = e.model_id
+      and mp.interval_value > coalesce(lm_plan.interval_value, 0)
+      and (em.cycle_duration is null or coalesce(lm_plan.interval_value, 0) < em.cycle_duration)
+    order by mp.interval_value asc
+    limit 1
+  ) same_cycle
 
   union all
 
-  -- Novo ciclo: o último plano fechou o ciclo (ou cycle_duration não está definido e não há próximo)
-  select
-    mp.interval_value,
-    mp.name,
-    false as is_same_cycle
-  from public.maintenance_plans mp
-  where mp.model_id = e.model_id
-    and em.cycle_duration is not null
-    and coalesce(lm_plan.interval_value, 0) >= em.cycle_duration
-  order by mp.interval_value asc
+  select * from (
+    select
+      mp.interval_value,
+      mp.name,
+      false as is_same_cycle
+    from public.maintenance_plans mp
+    where mp.model_id = e.model_id
+      and em.cycle_duration is not null
+      and coalesce(lm_plan.interval_value, 0) >= em.cycle_duration
+    order by mp.interval_value asc
+    limit 1
+  ) new_cycle
+
   limit 1
 ) np on true
 
