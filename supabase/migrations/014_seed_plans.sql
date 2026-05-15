@@ -2,6 +2,7 @@
 -- Migration 014 - Planos de manutenção + produtos ausentes
 -- Fonte: LISTAGEM KIT DE MATERIAIS X MATERIAIS (Excel)
 -- 41 novos produtos | 19 planos | 186 itens
+-- Nomenclatura: Marca - Modelo - Intervaloh  (ex: John Deere - 750J - 500h)
 -- Execute no editor SQL do Supabase
 -- ============================================================
 
@@ -58,6 +59,7 @@ on conflict (code) do update set
 
 -- ------------------------------------------------------------
 -- PARTE 2: 19 planos de manutenção + itens
+-- Nomenclatura: Marca - Modelo - Intervaloh
 -- Idempotente: ignora planos já existentes (mesmo model+interval+name)
 -- ------------------------------------------------------------
 do $$
@@ -65,14 +67,14 @@ declare
   plan_id uuid;
 begin
 
-  -- KIT REVISÃO 500HRS JOHN DEERE / 750J (500h)
+  -- John Deere - 750J - 500h
   select id into plan_id
   from public.maintenance_plans
-  where model_id = 'a9f85a8c-94c9-4af1-8cc4-9e5c18053273' and interval_value = 500 and name = 'KIT REVISÃO 500HRS JOHN DEERE / 750J';
+  where model_id = 'a9f85a8c-94c9-4af1-8cc4-9e5c18053273' and interval_value = 500 and name = 'John Deere - 750J - 500h';
 
   if plan_id is null then
     insert into public.maintenance_plans (model_id, interval_value, name)
-    values ('a9f85a8c-94c9-4af1-8cc4-9e5c18053273', 500, 'KIT REVISÃO 500HRS JOHN DEERE / 750J')
+    values ('a9f85a8c-94c9-4af1-8cc4-9e5c18053273', 500, 'John Deere - 750J - 500h')
     returning id into plan_id;
 
     insert into public.maintenance_plan_items (plan_id, description, order_index)
@@ -94,14 +96,14 @@ begin
   end if;
 
 
-  -- KIT REVISÃO 500HRS JOHN DEERE / 210G (500h)
+  -- John Deere - 210G - 500h
   select id into plan_id
   from public.maintenance_plans
-  where model_id = '86d5d7b0-9fba-4370-aea8-b357cbcd8e50' and interval_value = 500 and name = 'KIT REVISÃO 500HRS JOHN DEERE / 210G';
+  where model_id = '86d5d7b0-9fba-4370-aea8-b357cbcd8e50' and interval_value = 500 and name = 'John Deere - 210G - 500h';
 
   if plan_id is null then
     insert into public.maintenance_plans (model_id, interval_value, name)
-    values ('86d5d7b0-9fba-4370-aea8-b357cbcd8e50', 500, 'KIT REVISÃO 500HRS JOHN DEERE / 210G')
+    values ('86d5d7b0-9fba-4370-aea8-b357cbcd8e50', 500, 'John Deere - 210G - 500h')
     returning id into plan_id;
 
     insert into public.maintenance_plan_items (plan_id, description, order_index)
@@ -125,14 +127,14 @@ begin
   end if;
 
 
-  -- KIT REVISÃO 500HRS CASE 580N4X4 (500h)
+  -- Case - 580N4X4 - 500h
   select id into plan_id
   from public.maintenance_plans
-  where model_id = '11b5aefd-c1c6-4ca9-9687-0eba66d63439' and interval_value = 500 and name = 'KIT REVISÃO 500HRS CASE 580N4X4';
+  where model_id = '11b5aefd-c1c6-4ca9-9687-0eba66d63439' and interval_value = 500 and name = 'Case - 580N4X4 - 500h';
 
   if plan_id is null then
     insert into public.maintenance_plans (model_id, interval_value, name)
-    values ('11b5aefd-c1c6-4ca9-9687-0eba66d63439', 500, 'KIT REVISÃO 500HRS CASE 580N4X4')
+    values ('11b5aefd-c1c6-4ca9-9687-0eba66d63439', 500, 'Case - 580N4X4 - 500h')
     returning id into plan_id;
 
     insert into public.maintenance_plan_items (plan_id, description, order_index)
@@ -150,14 +152,14 @@ begin
   end if;
 
 
-  -- KIT REVISÃO 500HRS  JOHN DEERE / 310L (500h)
+  -- John Deere - 310L - 500h
   select id into plan_id
   from public.maintenance_plans
-  where model_id = '62b8886f-a208-4973-b8e9-0ffbac43635f' and interval_value = 500 and name = 'KIT REVISÃO 500HRS  JOHN DEERE / 310L';
+  where model_id = '62b8886f-a208-4973-b8e9-0ffbac43635f' and interval_value = 500 and name = 'John Deere - 310L - 500h';
 
   if plan_id is null then
     insert into public.maintenance_plans (model_id, interval_value, name)
-    values ('62b8886f-a208-4973-b8e9-0ffbac43635f', 500, 'KIT REVISÃO 500HRS  JOHN DEERE / 310L')
+    values ('62b8886f-a208-4973-b8e9-0ffbac43635f', 500, 'John Deere - 310L - 500h')
     returning id into plan_id;
 
     insert into public.maintenance_plan_items (plan_id, description, order_index)
@@ -177,14 +179,14 @@ begin
   end if;
 
 
-  -- KIT REVISÃO 1000HRS CASE 580N4X4 (1000h)
+  -- Case - 580N4X4 - 1000h
   select id into plan_id
   from public.maintenance_plans
-  where model_id = '11b5aefd-c1c6-4ca9-9687-0eba66d63439' and interval_value = 1000 and name = 'KIT REVISÃO 1000HRS CASE 580N4X4';
+  where model_id = '11b5aefd-c1c6-4ca9-9687-0eba66d63439' and interval_value = 1000 and name = 'Case - 580N4X4 - 1000h';
 
   if plan_id is null then
     insert into public.maintenance_plans (model_id, interval_value, name)
-    values ('11b5aefd-c1c6-4ca9-9687-0eba66d63439', 1000, 'KIT REVISÃO 1000HRS CASE 580N4X4')
+    values ('11b5aefd-c1c6-4ca9-9687-0eba66d63439', 1000, 'Case - 580N4X4 - 1000h')
     returning id into plan_id;
 
     insert into public.maintenance_plan_items (plan_id, description, order_index)
@@ -222,14 +224,14 @@ begin
   end if;
 
 
-  -- KIT REVISÃO 2000HRS CASE 580N4X4 (2000h)
+  -- Case - 580N4X4 - 2000h
   select id into plan_id
   from public.maintenance_plans
-  where model_id = '11b5aefd-c1c6-4ca9-9687-0eba66d63439' and interval_value = 2000 and name = 'KIT REVISÃO 2000HRS CASE 580N4X4';
+  where model_id = '11b5aefd-c1c6-4ca9-9687-0eba66d63439' and interval_value = 2000 and name = 'Case - 580N4X4 - 2000h';
 
   if plan_id is null then
     insert into public.maintenance_plans (model_id, interval_value, name)
-    values ('11b5aefd-c1c6-4ca9-9687-0eba66d63439', 2000, 'KIT REVISÃO 2000HRS CASE 580N4X4')
+    values ('11b5aefd-c1c6-4ca9-9687-0eba66d63439', 2000, 'Case - 580N4X4 - 2000h')
     returning id into plan_id;
 
     insert into public.maintenance_plan_items (plan_id, description, order_index)
@@ -267,14 +269,14 @@ begin
   end if;
 
 
-  -- KIT REVISÃO 500HRS LIUGONG / 766A (500h)
+  -- Liugong - 766A - 500h
   select id into plan_id
   from public.maintenance_plans
-  where model_id = '610a20c3-180c-4a39-8f7d-af5cab2e03b2' and interval_value = 500 and name = 'KIT REVISÃO 500HRS LIUGONG / 766A';
+  where model_id = '610a20c3-180c-4a39-8f7d-af5cab2e03b2' and interval_value = 500 and name = 'Liugong - 766A - 500h';
 
   if plan_id is null then
     insert into public.maintenance_plans (model_id, interval_value, name)
-    values ('610a20c3-180c-4a39-8f7d-af5cab2e03b2', 500, 'KIT REVISÃO 500HRS LIUGONG / 766A')
+    values ('610a20c3-180c-4a39-8f7d-af5cab2e03b2', 500, 'Liugong - 766A - 500h')
     returning id into plan_id;
 
     insert into public.maintenance_plan_items (plan_id, description, order_index)
@@ -292,14 +294,14 @@ begin
   end if;
 
 
-  -- KIT REVISÃO 1000HRS LIUGONG / 766A (1000h)
+  -- Liugong - 766A - 1000h
   select id into plan_id
   from public.maintenance_plans
-  where model_id = '610a20c3-180c-4a39-8f7d-af5cab2e03b2' and interval_value = 1000 and name = 'KIT REVISÃO 1000HRS LIUGONG / 766A';
+  where model_id = '610a20c3-180c-4a39-8f7d-af5cab2e03b2' and interval_value = 1000 and name = 'Liugong - 766A - 1000h';
 
   if plan_id is null then
     insert into public.maintenance_plans (model_id, interval_value, name)
-    values ('610a20c3-180c-4a39-8f7d-af5cab2e03b2', 1000, 'KIT REVISÃO 1000HRS LIUGONG / 766A')
+    values ('610a20c3-180c-4a39-8f7d-af5cab2e03b2', 1000, 'Liugong - 766A - 1000h')
     returning id into plan_id;
 
     insert into public.maintenance_plan_items (plan_id, description, order_index)
@@ -327,14 +329,14 @@ begin
   end if;
 
 
-  -- KIT REVISÃO 1500HRS LIUGONG / 766A (1500h)
+  -- Liugong - 766A - 1500h
   select id into plan_id
   from public.maintenance_plans
-  where model_id = '610a20c3-180c-4a39-8f7d-af5cab2e03b2' and interval_value = 1500 and name = 'KIT REVISÃO 1500HRS LIUGONG / 766A';
+  where model_id = '610a20c3-180c-4a39-8f7d-af5cab2e03b2' and interval_value = 1500 and name = 'Liugong - 766A - 1500h';
 
   if plan_id is null then
     insert into public.maintenance_plans (model_id, interval_value, name)
-    values ('610a20c3-180c-4a39-8f7d-af5cab2e03b2', 1500, 'KIT REVISÃO 1500HRS LIUGONG / 766A')
+    values ('610a20c3-180c-4a39-8f7d-af5cab2e03b2', 1500, 'Liugong - 766A - 1500h')
     returning id into plan_id;
 
     insert into public.maintenance_plan_items (plan_id, description, order_index)
@@ -352,14 +354,14 @@ begin
   end if;
 
 
-  -- KIT REVISÃO 2000HRS LIUGONG / 766A (2000h)
+  -- Liugong - 766A - 2000h
   select id into plan_id
   from public.maintenance_plans
-  where model_id = '610a20c3-180c-4a39-8f7d-af5cab2e03b2' and interval_value = 2000 and name = 'KIT REVISÃO 2000HRS LIUGONG / 766A';
+  where model_id = '610a20c3-180c-4a39-8f7d-af5cab2e03b2' and interval_value = 2000 and name = 'Liugong - 766A - 2000h';
 
   if plan_id is null then
     insert into public.maintenance_plans (model_id, interval_value, name)
-    values ('610a20c3-180c-4a39-8f7d-af5cab2e03b2', 2000, 'KIT REVISÃO 2000HRS LIUGONG / 766A')
+    values ('610a20c3-180c-4a39-8f7d-af5cab2e03b2', 2000, 'Liugong - 766A - 2000h')
     returning id into plan_id;
 
     insert into public.maintenance_plan_items (plan_id, description, order_index)
@@ -393,14 +395,14 @@ begin
   end if;
 
 
-  -- KIT REVISÃO 500HRS LIUGONG / 4180D (500h)
+  -- Liugong - 4180D - 500h
   select id into plan_id
   from public.maintenance_plans
-  where model_id = '244b7c2d-202e-4f2f-8399-e937072ed564' and interval_value = 500 and name = 'KIT REVISÃO 500HRS LIUGONG / 4180D';
+  where model_id = '244b7c2d-202e-4f2f-8399-e937072ed564' and interval_value = 500 and name = 'Liugong - 4180D - 500h';
 
   if plan_id is null then
     insert into public.maintenance_plans (model_id, interval_value, name)
-    values ('244b7c2d-202e-4f2f-8399-e937072ed564', 500, 'KIT REVISÃO 500HRS LIUGONG / 4180D')
+    values ('244b7c2d-202e-4f2f-8399-e937072ed564', 500, 'Liugong - 4180D - 500h')
     returning id into plan_id;
 
     insert into public.maintenance_plan_items (plan_id, description, order_index)
@@ -418,14 +420,14 @@ begin
   end if;
 
 
-  -- KIT REVISÃO 500HRS CASE / 1150L (500h)
+  -- Case - 1150L - 500h
   select id into plan_id
   from public.maintenance_plans
-  where model_id = '27c5507a-40f2-4614-806d-f39cba10b676' and interval_value = 500 and name = 'KIT REVISÃO 500HRS CASE / 1150L';
+  where model_id = '27c5507a-40f2-4614-806d-f39cba10b676' and interval_value = 500 and name = 'Case - 1150L - 500h';
 
   if plan_id is null then
     insert into public.maintenance_plans (model_id, interval_value, name)
-    values ('27c5507a-40f2-4614-806d-f39cba10b676', 500, 'KIT REVISÃO 500HRS CASE / 1150L')
+    values ('27c5507a-40f2-4614-806d-f39cba10b676', 500, 'Case - 1150L - 500h')
     returning id into plan_id;
 
     insert into public.maintenance_plan_items (plan_id, description, order_index)
@@ -443,14 +445,14 @@ begin
   end if;
 
 
-  -- KIT REVISÃO 1000HRS CASE / 1150L (1000h)
+  -- Case - 1150L - 1000h
   select id into plan_id
   from public.maintenance_plans
-  where model_id = '27c5507a-40f2-4614-806d-f39cba10b676' and interval_value = 1000 and name = 'KIT REVISÃO 1000HRS CASE / 1150L';
+  where model_id = '27c5507a-40f2-4614-806d-f39cba10b676' and interval_value = 1000 and name = 'Case - 1150L - 1000h';
 
   if plan_id is null then
     insert into public.maintenance_plans (model_id, interval_value, name)
-    values ('27c5507a-40f2-4614-806d-f39cba10b676', 1000, 'KIT REVISÃO 1000HRS CASE / 1150L')
+    values ('27c5507a-40f2-4614-806d-f39cba10b676', 1000, 'Case - 1150L - 1000h')
     returning id into plan_id;
 
     insert into public.maintenance_plan_items (plan_id, description, order_index)
@@ -478,14 +480,14 @@ begin
   end if;
 
 
-  -- KIT REVISÃO 2000HRS CASE / 1150L (2000h)
+  -- Case - 1150L - 2000h
   select id into plan_id
   from public.maintenance_plans
-  where model_id = '27c5507a-40f2-4614-806d-f39cba10b676' and interval_value = 2000 and name = 'KIT REVISÃO 2000HRS CASE / 1150L';
+  where model_id = '27c5507a-40f2-4614-806d-f39cba10b676' and interval_value = 2000 and name = 'Case - 1150L - 2000h';
 
   if plan_id is null then
     insert into public.maintenance_plans (model_id, interval_value, name)
-    values ('27c5507a-40f2-4614-806d-f39cba10b676', 2000, 'KIT REVISÃO 2000HRS CASE / 1150L')
+    values ('27c5507a-40f2-4614-806d-f39cba10b676', 2000, 'Case - 1150L - 2000h')
     returning id into plan_id;
 
     insert into public.maintenance_plan_items (plan_id, description, order_index)
@@ -517,14 +519,14 @@ begin
   end if;
 
 
-  -- KIT REVISÃO 500HRS JOHN DEERE / 750J II (500h)
+  -- John Deere - 750J II - 500h
   select id into plan_id
   from public.maintenance_plans
-  where model_id = '2b0ff719-0d27-4a47-ad5a-244d7c19ed38' and interval_value = 500 and name = 'KIT REVISÃO 500HRS JOHN DEERE / 750J II';
+  where model_id = '2b0ff719-0d27-4a47-ad5a-244d7c19ed38' and interval_value = 500 and name = 'John Deere - 750J II - 500h';
 
   if plan_id is null then
     insert into public.maintenance_plans (model_id, interval_value, name)
-    values ('2b0ff719-0d27-4a47-ad5a-244d7c19ed38', 500, 'KIT REVISÃO 500HRS JOHN DEERE / 750J II')
+    values ('2b0ff719-0d27-4a47-ad5a-244d7c19ed38', 500, 'John Deere - 750J II - 500h')
     returning id into plan_id;
 
     insert into public.maintenance_plan_items (plan_id, description, order_index)
@@ -548,14 +550,14 @@ begin
   end if;
 
 
-  -- KIT REVISÃO 500HRS HYUNDAI / R220LC-9SB (500h)
+  -- Hyundai - R220LC-9SB - 500h
   select id into plan_id
   from public.maintenance_plans
-  where model_id = 'aa5014e8-23c5-4650-84a1-9cd6c1e7876e' and interval_value = 500 and name = 'KIT REVISÃO 500HRS HYUNDAI / R220LC-9SB';
+  where model_id = 'aa5014e8-23c5-4650-84a1-9cd6c1e7876e' and interval_value = 500 and name = 'Hyundai - R220LC-9SB - 500h';
 
   if plan_id is null then
     insert into public.maintenance_plans (model_id, interval_value, name)
-    values ('aa5014e8-23c5-4650-84a1-9cd6c1e7876e', 500, 'KIT REVISÃO 500HRS HYUNDAI / R220LC-9SB')
+    values ('aa5014e8-23c5-4650-84a1-9cd6c1e7876e', 500, 'Hyundai - R220LC-9SB - 500h')
     returning id into plan_id;
 
     insert into public.maintenance_plan_items (plan_id, description, order_index)
@@ -573,14 +575,14 @@ begin
   end if;
 
 
-  -- KIT REVISÃO 1000HRS HYUNDAI / R220LC-9SB (1000h)
+  -- Hyundai - R220LC-9SB - 1000h
   select id into plan_id
   from public.maintenance_plans
-  where model_id = 'aa5014e8-23c5-4650-84a1-9cd6c1e7876e' and interval_value = 1000 and name = 'KIT REVISÃO 1000HRS HYUNDAI / R220LC-9SB';
+  where model_id = 'aa5014e8-23c5-4650-84a1-9cd6c1e7876e' and interval_value = 1000 and name = 'Hyundai - R220LC-9SB - 1000h';
 
   if plan_id is null then
     insert into public.maintenance_plans (model_id, interval_value, name)
-    values ('aa5014e8-23c5-4650-84a1-9cd6c1e7876e', 1000, 'KIT REVISÃO 1000HRS HYUNDAI / R220LC-9SB')
+    values ('aa5014e8-23c5-4650-84a1-9cd6c1e7876e', 1000, 'Hyundai - R220LC-9SB - 1000h')
     returning id into plan_id;
 
     insert into public.maintenance_plan_items (plan_id, description, order_index)
@@ -612,14 +614,14 @@ begin
   end if;
 
 
-  -- KIT REVISÃO 500HRS HYUNDAI / R210 LC-7 (500h)
+  -- Hyundai - R210 LC-7 - 500h
   select id into plan_id
   from public.maintenance_plans
-  where model_id = '5227e3d1-666c-4387-beae-2cc1e8e0b01e' and interval_value = 500 and name = 'KIT REVISÃO 500HRS HYUNDAI / R210 LC-7';
+  where model_id = '5227e3d1-666c-4387-beae-2cc1e8e0b01e' and interval_value = 500 and name = 'Hyundai - R210 LC-7 - 500h';
 
   if plan_id is null then
     insert into public.maintenance_plans (model_id, interval_value, name)
-    values ('5227e3d1-666c-4387-beae-2cc1e8e0b01e', 500, 'KIT REVISÃO 500HRS HYUNDAI / R210 LC-7')
+    values ('5227e3d1-666c-4387-beae-2cc1e8e0b01e', 500, 'Hyundai - R210 LC-7 - 500h')
     returning id into plan_id;
 
     insert into public.maintenance_plan_items (plan_id, description, order_index)
@@ -647,14 +649,14 @@ begin
   end if;
 
 
-  -- KIT REVISÃO 1000HRS HYUNDAI / R210 LC-7 (1000h)
+  -- Hyundai - R210 LC-7 - 1000h
   select id into plan_id
   from public.maintenance_plans
-  where model_id = '5227e3d1-666c-4387-beae-2cc1e8e0b01e' and interval_value = 1000 and name = 'KIT REVISÃO 1000HRS HYUNDAI / R210 LC-7';
+  where model_id = '5227e3d1-666c-4387-beae-2cc1e8e0b01e' and interval_value = 1000 and name = 'Hyundai - R210 LC-7 - 1000h';
 
   if plan_id is null then
     insert into public.maintenance_plans (model_id, interval_value, name)
-    values ('5227e3d1-666c-4387-beae-2cc1e8e0b01e', 1000, 'KIT REVISÃO 1000HRS HYUNDAI / R210 LC-7')
+    values ('5227e3d1-666c-4387-beae-2cc1e8e0b01e', 1000, 'Hyundai - R210 LC-7 - 1000h')
     returning id into plan_id;
 
     insert into public.maintenance_plan_items (plan_id, description, order_index)
