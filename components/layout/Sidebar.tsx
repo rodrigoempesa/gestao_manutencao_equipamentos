@@ -16,6 +16,7 @@ import {
   Package,
   Hammer,
   ShoppingCart,
+  BarChart2,
   LogOut,
   Menu,
   X,
@@ -38,6 +39,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/servicos',     label: 'Serviços',              icon: Hammer,          module: 'servicos'     },
   { href: '/planos',       label: 'Planos de Manutenção',  icon: BookOpen,        module: 'planos'       },
   { href: '/solicitacoes', label: 'Solicitações de Compra', icon: ShoppingCart,    module: 'solicitacoes' },
+  { href: '/relatorios',   label: 'Relatórios',            icon: BarChart2,       module: 'relatorios'   },
   { href: '/filiais',      label: 'Filiais',               icon: Building2,       module: 'filiais'      },
   { href: '/usuarios',     label: 'Usuários',              icon: Users,           module: 'usuarios'     },
 ]
