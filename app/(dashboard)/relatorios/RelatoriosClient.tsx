@@ -52,6 +52,13 @@ export default function RelatoriosClient({
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
+  // Sem Horímetro Inicial — lista local para remoção ao salvar
+  const [pendingList, setPendingList] = useState<any[]>(noInitialList)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({ reading: '', date: '' })
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
   const lateReadings = useMemo(() => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
