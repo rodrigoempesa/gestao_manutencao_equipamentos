@@ -69,6 +69,7 @@ export interface Equipment {
   initial_reading_date: string | null
   notes: string | null
   active: boolean
+  inactive_reason: 'manutencao' | 'vendido' | null
   created_at: string
   updated_at: string
   equipment_models?: EquipmentModel & { brands?: Brand }
