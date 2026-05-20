@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { formatDate } from '@/lib/utils'
-import { Download, Clock, Database, AlertTriangle, Pencil, X, Check, Loader2 } from 'lucide-react'
+import { Download, Clock, Database, AlertTriangle, Pencil, X, Check, Loader2, EyeOff } from 'lucide-react'
 
 type DaysFilter = 7 | 15 | 30
 type Tab = 'leituras' | 'horimetro' | 'planos'
@@ -43,6 +43,7 @@ export default function RelatoriosClient({
 }) {
   const [tab, setTab] = useState<Tab>('leituras')
   const [daysFilter, setDaysFilter] = useState<DaysFilter>(7)
+  const [showInactive, setShowInactive] = useState(false)
 
   // Sem Horímetro Inicial — lista local para remoção ao salvar
   const [pendingList, setPendingList] = useState<any[]>(noInitialList)
@@ -59,6 +60,7 @@ export default function RelatoriosClient({
 
     return statusList
       .filter(eq => {
+        if (!showInactive && !eq.active) return false
         if (!eq.last_reading_date) return true
         return new Date(eq.last_reading_date) < cutoff
       })
@@ -68,7 +70,7 @@ export default function RelatoriosClient({
         if (!b.last_reading_date) return 1
         return new Date(a.last_reading_date).getTime() - new Date(b.last_reading_date).getTime()
       })
-  }, [statusList, daysFilter])
+  }, [statusList, daysFilter, showInactive])
 
   function openEdit(eq: any) {
     setEditingId(eq.id)
@@ -110,9 +112,11 @@ export default function RelatoriosClient({
     setPendingList(prev => prev.filter(e => e.id !== eq.id))
   }
 
+  const visiblePending = showInactive ? pendingList : pendingList.filter(eq => eq.active)
+
   const tabs = [
     { key: 'leituras' as Tab, label: 'Leituras Atrasadas', icon: Clock, count: null },
-    { key: 'horimetro' as Tab, label: 'Sem Horímetro Inicial', icon: Database, count: pendingList.length },
+    { key: 'horimetro' as Tab, label: 'Sem Horímetro Inicial', icon: Database, count: visiblePending.length },
     ...(isAdminGeral
       ? [{ key: 'planos' as Tab, label: 'Modelos Sem Planos', icon: AlertTriangle, count: noPlansModels.length }]
       : []),
@@ -125,8 +129,9 @@ export default function RelatoriosClient({
         <p className="text-gray-500 text-sm mt-1">Indicadores operacionais e pendências</p>
       </div>
 
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+      {/* Toggle inativos + Tabs */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-1 bg-gray-100 p-1 rounded-xl w-fit">
         {tabs.map(({ key, label, icon: Icon, count }) => (
           <button
             key={key}
@@ -146,6 +151,18 @@ export default function RelatoriosClient({
             )}
           </button>
         ))}
+        </div>
+        <button
+          onClick={() => setShowInactive(v => !v)}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
+            showInactive
+              ? 'bg-gray-700 text-white border-gray-700'
+              : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+          }`}
+        >
+          <EyeOff className="w-4 h-4" />
+          {showInactive ? 'Mostrando inativos' : 'Incluir inativos'}
+        </button>
       </div>
 
       {/* Leituras Atrasadas */}
@@ -209,9 +226,12 @@ export default function RelatoriosClient({
                 ) : lateReadings.map(eq => {
                   const ds = daysSince(eq.last_reading_date)
                   return (
-                    <tr key={eq.id} className="hover:bg-gray-50">
+                    <tr key={eq.id} className={`hover:bg-gray-50 ${!eq.active ? 'opacity-60' : ''}`}>
                       <td className="table-cell">
-                        <p className="font-semibold text-gray-900">{eq.code}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-gray-900">{eq.code}</p>
+                          {!eq.active && <span className="badge-gray text-xs">Inativo</span>}
+                        </div>
                         <p className="text-xs text-gray-500 truncate max-w-[160px]">{eq.name}</p>
                       </td>
                       <td className="table-cell">
@@ -248,13 +268,13 @@ export default function RelatoriosClient({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-sm text-gray-500">
-              {pendingList.length} equipamento{pendingList.length !== 1 ? 's' : ''} sem horímetro inicial cadastrado
+              {visiblePending.length} equipamento{visiblePending.length !== 1 ? 's' : ''} sem horímetro inicial cadastrado
             </span>
             <button
               onClick={() => downloadCsv(
                 'sem_horimetro_inicial.csv',
                 ['Código', 'Nome', 'Filial', 'Cidade', 'Estado', 'Marca', 'Modelo'],
-                pendingList.map((eq: any) => [
+                visiblePending.map((eq: any) => [
                   eq.code, eq.name,
                   eq.branches?.name, eq.branches?.city, eq.branches?.state,
                   eq.equipment_models?.brands?.name, eq.equipment_models?.name,
@@ -277,17 +297,20 @@ export default function RelatoriosClient({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {pendingList.length === 0 ? (
+                {visiblePending.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="table-cell text-center text-gray-400 py-12">
                       Todos os equipamentos têm horímetro inicial cadastrado
                     </td>
                   </tr>
-                ) : pendingList.map((eq: any) => (
+                ) : visiblePending.map((eq: any) => (
                   <>
-                    <tr key={eq.id} className={`hover:bg-gray-50 ${editingId === eq.id ? 'bg-blue-50' : ''}`}>
+                    <tr key={eq.id} className={`hover:bg-gray-50 ${editingId === eq.id ? 'bg-blue-50' : ''} ${!eq.active ? 'opacity-60' : ''}`}>
                       <td className="table-cell">
-                        <p className="font-semibold text-gray-900">{eq.code}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-gray-900">{eq.code}</p>
+                          {!eq.active && <span className="badge-gray text-xs">Inativo</span>}
+                        </div>
                         <p className="text-xs text-gray-500 truncate max-w-[160px]">{eq.name}</p>
                       </td>
                       <td className="table-cell">
