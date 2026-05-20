@@ -547,15 +547,13 @@ export default function EquipamentosPage() {
                 <th className="table-header">Nome</th>
                 <th className="table-header">Marca / Modelo</th>
                 <th className="table-header">Filial</th>
-                <th className="table-header">Ano</th>
-                <th className="table-header">Tipo</th>
                 <th className="table-header">Status</th>
                 {isAdmin && <th className="table-header">Ações</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 && (
-                <tr><td colSpan={8} className="table-cell text-center text-gray-400 py-12">Nenhum equipamento encontrado</td></tr>
+                <tr><td colSpan={6} className="table-cell text-center text-gray-400 py-12">Nenhum equipamento encontrado</td></tr>
               )}
               {filtered.map(eq => (
                 <tr key={eq.id} className={`hover:bg-gray-50 transition-colors ${!eq.active ? 'opacity-50' : ''}`}>
@@ -571,10 +569,6 @@ export default function EquipamentosPage() {
                   <td className="table-cell">
                     <p>{(eq as any).branches?.name}</p>
                     <p className="text-xs text-gray-400">{(eq as any).branches?.city}/{(eq as any).branches?.state}</p>
-                  </td>
-                  <td className="table-cell">{eq.year ?? '-'}</td>
-                  <td className="table-cell">
-                    <span className="badge-blue">{trackingLabel(eq.equipment_models?.tracking_type ?? 'hours')}</span>
                   </td>
                   <td className="table-cell">
                     {eq.active
