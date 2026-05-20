@@ -18,11 +18,10 @@ export default async function RelatoriosPage() {
 
   const isAdminGeral = profile.role === 'admin_geral'
 
-  // Equipment with last reading date (from vw_equipment_status)
+  // Equipment with last reading date (from vw_equipment_status) — all statuses
   let statusQuery = supabase
     .from('vw_equipment_status')
-    .select('id, code, name, branch_id, branch_name, branch_city, branch_state, last_reading_date')
-    .eq('active', true)
+    .select('id, code, name, active, branch_id, branch_name, branch_city, branch_state, last_reading_date')
     .order('code')
 
   if (!isAdminGeral && profile.branch_id) {
@@ -31,11 +30,10 @@ export default async function RelatoriosPage() {
 
   const { data: statusList } = await statusQuery
 
-  // Equipment without initial_reading
+  // Equipment without initial_reading — all statuses
   let noInitialQuery = supabase
     .from('equipment')
-    .select('id, code, name, branch_id, branches(name, city, state), equipment_models(name, brands(name))')
-    .eq('active', true)
+    .select('id, code, name, active, branch_id, branches(name, city, state), equipment_models(name, brands(name))')
     .is('initial_reading', null)
     .order('code')
 
