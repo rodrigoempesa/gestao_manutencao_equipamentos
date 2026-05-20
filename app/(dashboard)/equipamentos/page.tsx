@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Equipment, EquipmentModel, Branch } from '@/lib/types'
 import { trackingLabel } from '@/lib/utils'
-import { ClipboardList, Plus, Pencil, ToggleLeft, ToggleRight, X, Search, SlidersHorizontal, Upload, AlertCircle, CheckCircle2, Download, Wrench, DollarSign, PauseCircle } from 'lucide-react'
+import { ClipboardList, Plus, Pencil, ToggleLeft, ToggleRight, X, Search, SlidersHorizontal, Upload, AlertCircle, CheckCircle2, Download, Wrench, DollarSign, PauseCircle, ArrowRightLeft } from 'lucide-react'
 
 interface FormState {
   id: string
@@ -81,6 +81,13 @@ export default function EquipamentosPage() {
   const [showInactiveModal, setShowInactiveModal] = useState(false)
   const [inactiveTarget, setInactiveTarget] = useState<Equipment | null>(null)
   const [inactiveReason, setInactiveReason] = useState<'manutencao' | 'vendido' | 'parada' | null>(null)
+
+  // Transfer modal
+  const [showTransferModal, setShowTransferModal] = useState(false)
+  const [transferTarget, setTransferTarget] = useState<Equipment | null>(null)
+  const [transferForm, setTransferForm] = useState({ date: '', branch_id: '', reading: '', notes: '' })
+  const [transferSaving, setTransferSaving] = useState(false)
+  const [transferError, setTransferError] = useState('')
   const [profile, setProfile] = useState<{ role: string; branch_id: string | null } | null>(null)
   const [search, setSearch] = useState('')
   const [filterBranch, setFilterBranch] = useState('')
@@ -221,6 +228,52 @@ export default function EquipamentosPage() {
     setShowInactiveModal(false)
     setInactiveTarget(null)
     setInactiveReason(null)
+    loadData()
+  }
+
+  function openTransfer(eq: Equipment) {
+    setTransferTarget(eq)
+    setTransferForm({ date: new Date().toISOString().split('T')[0], branch_id: '', reading: '', notes: '' })
+    setTransferError('')
+    setShowTransferModal(true)
+  }
+
+  async function confirmTransfer() {
+    if (!transferTarget) return
+    if (!transferForm.branch_id) { setTransferError('Selecione a filial de destino.'); return }
+    if (!transferForm.date) { setTransferError('Informe a data da transferência.'); return }
+    if (transferForm.reading === '') { setTransferError('Informe o horímetro no momento da transferência.'); return }
+    const reading = parseFloat(transferForm.reading)
+    if (isNaN(reading) || reading < 0) { setTransferError('Horímetro inválido.'); return }
+
+    setTransferSaving(true)
+    setTransferError('')
+    const { data: { user } } = await supabase.auth.getUser()
+
+    const { error: insertErr } = await supabase
+      .from('equipment_branch_transfers')
+      .insert({
+        equipment_id: transferTarget.id,
+        from_branch_id: transferTarget.branch_id,
+        to_branch_id: transferForm.branch_id,
+        transfer_date: transferForm.date,
+        reading_at_transfer: reading,
+        notes: transferForm.notes.trim() || null,
+        created_by: user?.id ?? null,
+      })
+
+    if (insertErr) { setTransferError('Erro ao registrar transferência.'); setTransferSaving(false); return }
+
+    const { error: updateErr } = await supabase
+      .from('equipment')
+      .update({ branch_id: transferForm.branch_id })
+      .eq('id', transferTarget.id)
+
+    setTransferSaving(false)
+    if (updateErr) { setTransferError('Transferência registrada mas erro ao atualizar filial.'); return }
+
+    setShowTransferModal(false)
+    setTransferTarget(null)
     loadData()
   }
 
@@ -535,6 +588,9 @@ export default function EquipamentosPage() {
                         <button className="btn-secondary py-1 px-2" onClick={() => openEdit(eq)} title="Editar">
                           <Pencil className="w-4 h-4" />
                         </button>
+                        <button className="btn-secondary py-1 px-2 text-blue-600" onClick={() => openTransfer(eq)} title="Transferir filial">
+                          <ArrowRightLeft className="w-4 h-4" />
+                        </button>
                         <button
                           className={`btn-secondary py-1 px-2 ${eq.active ? 'text-red-500' : 'text-green-600'}`}
                           onClick={() => toggleActive(eq)}
@@ -668,6 +724,89 @@ export default function EquipamentosPage() {
               <button className="btn-secondary" onClick={() => setShowForm(false)}>Cancelar</button>
               <button className="btn-primary" form="equip-form" type="submit" disabled={saving}>
                 {saving ? 'Salvando...' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transfer Branch Modal */}
+      {showTransferModal && transferTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <div>
+                <h3 className="font-semibold text-lg">Transferir Equipamento</h3>
+                <p className="text-sm text-gray-500 mt-0.5">{transferTarget.code} — {transferTarget.name}</p>
+              </div>
+              <button onClick={() => setShowTransferModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="label">Filial atual</label>
+                <input
+                  className="input bg-gray-50 text-gray-500 cursor-not-allowed"
+                  readOnly
+                  value={branches.find(b => b.id === transferTarget.branch_id)?.name ?? '—'}
+                />
+              </div>
+              <div>
+                <label className="label">Filial de destino *</label>
+                <select
+                  className="input"
+                  value={transferForm.branch_id}
+                  onChange={e => setTransferForm(f => ({ ...f, branch_id: e.target.value }))}
+                >
+                  <option value="">Selecione...</option>
+                  {branches
+                    .filter(b => b.id !== transferTarget.branch_id)
+                    .map(b => <option key={b.id} value={b.id}>{b.name} — {b.city}/{b.state}</option>)
+                  }
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Data da transferência *</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={transferForm.date}
+                    onChange={e => setTransferForm(f => ({ ...f, date: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="label">Horímetro atual *</label>
+                  <input
+                    type="number"
+                    className="input"
+                    min={0}
+                    step="0.1"
+                    placeholder="Ex: 10351"
+                    value={transferForm.reading}
+                    onChange={e => setTransferForm(f => ({ ...f, reading: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="label">Observações</label>
+                <textarea
+                  className="input"
+                  rows={2}
+                  placeholder="Opcional"
+                  value={transferForm.notes}
+                  onChange={e => setTransferForm(f => ({ ...f, notes: e.target.value }))}
+                />
+              </div>
+              {transferError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{transferError}</p>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t flex gap-3 justify-end">
+              <button className="btn-secondary" onClick={() => setShowTransferModal(false)}>Cancelar</button>
+              <button className="btn-primary" disabled={transferSaving} onClick={confirmTransfer}>
+                {transferSaving ? 'Salvando...' : 'Confirmar Transferência'}
               </button>
             </div>
           </div>
