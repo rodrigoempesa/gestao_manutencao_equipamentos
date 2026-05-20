@@ -231,11 +231,41 @@ export default function EquipamentosPage() {
     loadData()
   }
 
-  function openTransfer(eq: Equipment) {
+  const [transferLoadingReading, setTransferLoadingReading] = useState(false)
+
+  async function fetchLastReadingForDate(equipmentId: string, date: string): Promise<string> {
+    if (!date) return ''
+    const { data } = await supabase
+      .from('readings')
+      .select('reading_value')
+      .eq('equipment_id', equipmentId)
+      .lte('reading_date', date)
+      .order('reading_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+    return data ? String(data.reading_value) : ''
+  }
+
+  async function openTransfer(eq: Equipment) {
+    const today = new Date().toISOString().split('T')[0]
     setTransferTarget(eq)
-    setTransferForm({ date: new Date().toISOString().split('T')[0], branch_id: '', reading: '', notes: '' })
+    setTransferForm({ date: today, branch_id: '', reading: '', notes: '' })
     setTransferError('')
     setShowTransferModal(true)
+    setTransferLoadingReading(true)
+    const reading = await fetchLastReadingForDate(eq.id, today)
+    setTransferForm(f => ({ ...f, reading }))
+    setTransferLoadingReading(false)
+  }
+
+  async function handleTransferDateChange(date: string) {
+    setTransferForm(f => ({ ...f, date }))
+    if (!transferTarget || !date) return
+    setTransferLoadingReading(true)
+    const reading = await fetchLastReadingForDate(transferTarget.id, date)
+    setTransferForm(f => ({ ...f, date, reading }))
+    setTransferLoadingReading(false)
   }
 
   async function confirmTransfer() {
@@ -767,11 +797,14 @@ export default function EquipamentosPage() {
                     type="date"
                     className="input"
                     value={transferForm.date}
-                    onChange={e => setTransferForm(f => ({ ...f, date: e.target.value }))}
+                    onChange={e => handleTransferDateChange(e.target.value)}
                   />
                 </div>
                 <div>
-                  <label className="label">Horímetro atual *</label>
+                  <label className="label">
+                    Horímetro atual *
+                    {transferLoadingReading && <span className="ml-2 text-xs text-gray-400">buscando...</span>}
+                  </label>
                   <input
                     type="number"
                     className="input"
