@@ -52,13 +52,6 @@ export default function RelatoriosClient({
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  // Sem Horímetro Inicial — lista local para remoção ao salvar
-  const [pendingList, setPendingList] = useState<any[]>(noInitialList)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState({ reading: '', date: '' })
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
-
   const lateReadings = useMemo(() => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -77,7 +70,7 @@ export default function RelatoriosClient({
         if (!b.last_reading_date) return 1
         return new Date(a.last_reading_date).getTime() - new Date(b.last_reading_date).getTime()
       })
-  }, [statusList, daysFilter])
+  }, [statusList, daysFilter, showInactive])
 
   function openEdit(eq: any) {
     setEditingId(eq.id)
