@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Equipment, EquipmentModel, Branch } from '@/lib/types'
 import { trackingLabel } from '@/lib/utils'
-import { ClipboardList, Plus, Pencil, ToggleLeft, ToggleRight, X, Search, SlidersHorizontal, Upload, AlertCircle, CheckCircle2, Download, Wrench, DollarSign } from 'lucide-react'
+import { ClipboardList, Plus, Pencil, ToggleLeft, ToggleRight, X, Search, SlidersHorizontal, Upload, AlertCircle, CheckCircle2, Download, Wrench, DollarSign, PauseCircle } from 'lucide-react'
 
 interface FormState {
   id: string
@@ -80,7 +80,7 @@ export default function EquipamentosPage() {
   // Deactivation modal
   const [showInactiveModal, setShowInactiveModal] = useState(false)
   const [inactiveTarget, setInactiveTarget] = useState<Equipment | null>(null)
-  const [inactiveReason, setInactiveReason] = useState<'manutencao' | 'vendido' | null>(null)
+  const [inactiveReason, setInactiveReason] = useState<'manutencao' | 'vendido' | 'parada' | null>(null)
   const [profile, setProfile] = useState<{ role: string; branch_id: string | null } | null>(null)
   const [search, setSearch] = useState('')
   const [filterBranch, setFilterBranch] = useState('')
@@ -688,7 +688,7 @@ export default function EquipamentosPage() {
               <p className="text-sm text-gray-500">
                 Por que o equipamento <strong>{inactiveTarget.code}</strong> está sendo inativado?
               </p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <button
                   onClick={() => setInactiveReason('manutencao')}
                   className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-colors ${
@@ -699,6 +699,17 @@ export default function EquipamentosPage() {
                 >
                   <Wrench className="w-7 h-7" />
                   <span className="text-sm font-medium">Manutenção</span>
+                </button>
+                <button
+                  onClick={() => setInactiveReason('parada')}
+                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-colors ${
+                    inactiveReason === 'parada'
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                  }`}
+                >
+                  <PauseCircle className="w-7 h-7" />
+                  <span className="text-sm font-medium">Parada</span>
                 </button>
                 <button
                   onClick={() => setInactiveReason('vendido')}
