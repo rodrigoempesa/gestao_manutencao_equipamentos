@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import { formatDate } from '@/lib/utils'
-import { Download, Clock, Database, AlertTriangle } from 'lucide-react'
+import { Download, Clock, Database, AlertTriangle, Pencil, X, Check, Loader2 } from 'lucide-react'
 
 type DaysFilter = 7 | 15 | 30
 type Tab = 'leituras' | 'horimetro' | 'planos'
@@ -43,6 +44,13 @@ export default function RelatoriosClient({
   const [tab, setTab] = useState<Tab>('leituras')
   const [daysFilter, setDaysFilter] = useState<DaysFilter>(7)
 
+  // Sem Horímetro Inicial — lista local para remoção ao salvar
+  const [pendingList, setPendingList] = useState<any[]>(noInitialList)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({ reading: '', date: '' })
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
   const lateReadings = useMemo(() => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -62,9 +70,49 @@ export default function RelatoriosClient({
       })
   }, [statusList, daysFilter])
 
+  function openEdit(eq: any) {
+    setEditingId(eq.id)
+    setEditForm({ reading: '', date: '' })
+    setSaveError(null)
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setSaveError(null)
+  }
+
+  async function handleSave(eq: any) {
+    if (!editForm.reading || !editForm.date) {
+      setSaveError('Preencha o horímetro e a data.')
+      return
+    }
+    const reading = parseFloat(editForm.reading)
+    if (isNaN(reading) || reading < 0) {
+      setSaveError('Horímetro inválido.')
+      return
+    }
+
+    setSaving(true)
+    setSaveError(null)
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('equipment')
+      .update({ initial_reading: reading, initial_reading_date: editForm.date })
+      .eq('id', eq.id)
+
+    setSaving(false)
+    if (error) {
+      setSaveError('Erro ao salvar. Tente novamente.')
+      return
+    }
+
+    setEditingId(null)
+    setPendingList(prev => prev.filter(e => e.id !== eq.id))
+  }
+
   const tabs = [
     { key: 'leituras' as Tab, label: 'Leituras Atrasadas', icon: Clock, count: null },
-    { key: 'horimetro' as Tab, label: 'Sem Horímetro Inicial', icon: Database, count: noInitialList.length },
+    { key: 'horimetro' as Tab, label: 'Sem Horímetro Inicial', icon: Database, count: pendingList.length },
     ...(isAdminGeral
       ? [{ key: 'planos' as Tab, label: 'Modelos Sem Planos', icon: AlertTriangle, count: noPlansModels.length }]
       : []),
@@ -200,13 +248,13 @@ export default function RelatoriosClient({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-sm text-gray-500">
-              {noInitialList.length} equipamento{noInitialList.length !== 1 ? 's' : ''} sem horímetro inicial cadastrado
+              {pendingList.length} equipamento{pendingList.length !== 1 ? 's' : ''} sem horímetro inicial cadastrado
             </span>
             <button
               onClick={() => downloadCsv(
                 'sem_horimetro_inicial.csv',
                 ['Código', 'Nome', 'Filial', 'Cidade', 'Estado', 'Marca', 'Modelo'],
-                noInitialList.map((eq: any) => [
+                pendingList.map((eq: any) => [
                   eq.code, eq.name,
                   eq.branches?.name, eq.branches?.city, eq.branches?.state,
                   eq.equipment_models?.brands?.name, eq.equipment_models?.name,
@@ -225,29 +273,99 @@ export default function RelatoriosClient({
                   <th className="table-header">Código / Nome</th>
                   <th className="table-header">Filial</th>
                   <th className="table-header">Marca / Modelo</th>
+                  <th className="table-header w-8"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {noInitialList.length === 0 ? (
+                {pendingList.length === 0 ? (
                   <tr>
-                    <td colSpan={3} className="table-cell text-center text-gray-400 py-12">
+                    <td colSpan={4} className="table-cell text-center text-gray-400 py-12">
                       Todos os equipamentos têm horímetro inicial cadastrado
                     </td>
                   </tr>
-                ) : noInitialList.map((eq: any) => (
-                  <tr key={eq.id} className="hover:bg-gray-50">
-                    <td className="table-cell">
-                      <p className="font-semibold text-gray-900">{eq.code}</p>
-                      <p className="text-xs text-gray-500 truncate max-w-[160px]">{eq.name}</p>
-                    </td>
-                    <td className="table-cell">
-                      <p className="text-sm">{eq.branches?.name}</p>
-                      <p className="text-xs text-gray-400">{eq.branches?.city}/{eq.branches?.state}</p>
-                    </td>
-                    <td className="table-cell text-sm text-gray-600">
-                      {eq.equipment_models?.brands?.name} {eq.equipment_models?.name}
-                    </td>
-                  </tr>
+                ) : pendingList.map((eq: any) => (
+                  <>
+                    <tr key={eq.id} className={`hover:bg-gray-50 ${editingId === eq.id ? 'bg-blue-50' : ''}`}>
+                      <td className="table-cell">
+                        <p className="font-semibold text-gray-900">{eq.code}</p>
+                        <p className="text-xs text-gray-500 truncate max-w-[160px]">{eq.name}</p>
+                      </td>
+                      <td className="table-cell">
+                        <p className="text-sm">{eq.branches?.name}</p>
+                        <p className="text-xs text-gray-400">{eq.branches?.city}/{eq.branches?.state}</p>
+                      </td>
+                      <td className="table-cell text-sm text-gray-600">
+                        {eq.equipment_models?.brands?.name} {eq.equipment_models?.name}
+                      </td>
+                      <td className="table-cell">
+                        {editingId !== eq.id && (
+                          <button
+                            onClick={() => openEdit(eq)}
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors whitespace-nowrap"
+                          >
+                            <Pencil className="w-3.5 h-3.5" /> Preencher
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                    {editingId === eq.id && (
+                      <tr key={`${eq.id}-form`} className="bg-blue-50 border-t-0">
+                        <td colSpan={4} className="px-4 py-3">
+                          <div className="flex flex-wrap items-end gap-3">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">
+                                Horímetro inicial
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                className="input w-36 text-sm py-1.5"
+                                placeholder="Ex: 9200"
+                                value={editForm.reading}
+                                onChange={e => setEditForm(f => ({ ...f, reading: e.target.value }))}
+                                autoFocus
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">
+                                Data do horímetro
+                              </label>
+                              <input
+                                type="date"
+                                className="input w-40 text-sm py-1.5"
+                                value={editForm.date}
+                                onChange={e => setEditForm(f => ({ ...f, date: e.target.value }))}
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleSave(eq)}
+                                disabled={saving}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                              >
+                                {saving
+                                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                                  : <Check className="w-4 h-4" />
+                                }
+                                Salvar
+                              </button>
+                              <button
+                                onClick={cancelEdit}
+                                disabled={saving}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                              >
+                                <X className="w-4 h-4" /> Cancelar
+                              </button>
+                            </div>
+                            {saveError && (
+                              <p className="text-xs text-red-600 w-full">{saveError}</p>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 ))}
               </tbody>
             </table>
