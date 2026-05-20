@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Equipment, EquipmentModel, Branch } from '@/lib/types'
 import { trackingLabel } from '@/lib/utils'
-import { ClipboardList, Plus, Pencil, ToggleLeft, ToggleRight, X, Search, SlidersHorizontal, Upload, AlertCircle, CheckCircle2, Download } from 'lucide-react'
+import { ClipboardList, Plus, Pencil, ToggleLeft, ToggleRight, X, Search, SlidersHorizontal, Upload, AlertCircle, CheckCircle2, Download, Wrench, DollarSign } from 'lucide-react'
 
 interface FormState {
   id: string
@@ -76,6 +76,11 @@ export default function EquipamentosPage() {
   const [lastMaintenanceDate, setLastMaintenanceDate] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  // Deactivation modal
+  const [showInactiveModal, setShowInactiveModal] = useState(false)
+  const [inactiveTarget, setInactiveTarget] = useState<Equipment | null>(null)
+  const [inactiveReason, setInactiveReason] = useState<'manutencao' | 'vendido' | null>(null)
   const [profile, setProfile] = useState<{ role: string; branch_id: string | null } | null>(null)
   const [search, setSearch] = useState('')
   const [filterBranch, setFilterBranch] = useState('')
@@ -196,8 +201,26 @@ export default function EquipamentosPage() {
     setSaving(false)
   }
 
-  async function toggleActive(eq: Equipment) {
-    await supabase.from('equipment').update({ active: !eq.active }).eq('id', eq.id)
+  function toggleActive(eq: Equipment) {
+    if (eq.active) {
+      // Deactivating — ask for reason first
+      setInactiveTarget(eq)
+      setInactiveReason(null)
+      setShowInactiveModal(true)
+    } else {
+      // Reactivating — clear reason directly
+      supabase.from('equipment').update({ active: true, inactive_reason: null }).eq('id', eq.id).then(() => loadData())
+    }
+  }
+
+  async function confirmDeactivate() {
+    if (!inactiveTarget || !inactiveReason) return
+    await supabase.from('equipment')
+      .update({ active: false, inactive_reason: inactiveReason })
+      .eq('id', inactiveTarget.id)
+    setShowInactiveModal(false)
+    setInactiveTarget(null)
+    setInactiveReason(null)
     loadData()
   }
 
@@ -645,6 +668,59 @@ export default function EquipamentosPage() {
               <button className="btn-secondary" onClick={() => setShowForm(false)}>Cancelar</button>
               <button className="btn-primary" form="equip-form" type="submit" disabled={saving}>
                 {saving ? 'Salvando...' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Deactivation Reason Modal */}
+      {showInactiveModal && inactiveTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h3 className="font-semibold text-lg">Motivo da Inativação</h3>
+              <button onClick={() => setShowInactiveModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              <p className="text-sm text-gray-500">
+                Por que o equipamento <strong>{inactiveTarget.code}</strong> está sendo inativado?
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setInactiveReason('manutencao')}
+                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-colors ${
+                    inactiveReason === 'manutencao'
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                  }`}
+                >
+                  <Wrench className="w-7 h-7" />
+                  <span className="text-sm font-medium">Manutenção</span>
+                </button>
+                <button
+                  onClick={() => setInactiveReason('vendido')}
+                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-colors ${
+                    inactiveReason === 'vendido'
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                  }`}
+                >
+                  <DollarSign className="w-7 h-7" />
+                  <span className="text-sm font-medium">Vendido</span>
+                </button>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t flex gap-3 justify-end">
+              <button className="btn-secondary" onClick={() => setShowInactiveModal(false)}>Cancelar</button>
+              <button
+                className="btn-primary"
+                disabled={!inactiveReason}
+                onClick={confirmDeactivate}
+              >
+                Confirmar
               </button>
             </div>
           </div>
