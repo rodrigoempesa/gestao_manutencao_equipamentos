@@ -136,6 +136,33 @@ export interface EquipmentStatus {
 
 export type MaintenanceStatus = 'overdue' | 'warning' | 'ok' | 'no_data'
 
+export type WorkOrderStatus = 'aberta' | 'iniciada' | 'finalizada' | 'cancelada'
+export type WorkOrderType = 'preventive' | 'corrective'
+
+export interface WorkOrder {
+  id: string
+  number: string
+  type: WorkOrderType
+  status: WorkOrderStatus
+  equipment_id: string
+  plan_id: string | null
+  description: string | null
+  notes: string | null
+  opened_at: string
+  opened_by: string | null
+  started_at: string | null
+  started_reading: number | null
+  started_by: string | null
+  finished_at: string | null
+  finished_reading: number | null
+  finished_by: string | null
+  maintenance_record_id: string | null
+  created_at: string
+  updated_at: string
+  equipment?: Equipment & { equipment_models?: EquipmentModel & { brands?: Brand }; branches?: Branch }
+  maintenance_plans?: MaintenancePlan & { maintenance_plan_items?: MaintenancePlanItem[] }
+}
+
 // Uses the adjusted threshold (accounts for late services) rather than
 // the raw plan interval_value, so delays propagate forward correctly.
 export function getMaintenanceStatus(eq: EquipmentStatus): MaintenanceStatus {
