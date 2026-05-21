@@ -46,8 +46,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
       allowedModules = perms.map((p: any) => p.module_slug)
     } else {
       const defaults: Record<string, string[]> = {
-        admin_geral: ['dashboard','leituras','manutencoes','equipamentos','produtos','servicos','planos','solicitacoes','relatorios','filiais','usuarios'],
-        admin_local: ['dashboard','leituras','manutencoes','equipamentos','produtos','servicos','solicitacoes','relatorios','usuarios'],
+        admin_geral: ['dashboard','leituras','manutencoes','os','equipamentos','produtos','servicos','planos','solicitacoes','relatorios','filiais','usuarios'],
+        admin_local: ['dashboard','leituras','manutencoes','os','equipamentos','produtos','servicos','solicitacoes','relatorios','usuarios'],
+        encarregado: ['dashboard','leituras','os'],
         encarregado: ['dashboard','leituras'],
       }
       allowedModules = defaults[profile.role] ?? ['dashboard']
