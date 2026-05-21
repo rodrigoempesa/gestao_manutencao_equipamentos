@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import type { EquipmentStatus } from '@/lib/types'
 import { getMaintenanceStatus } from '@/lib/types'
-import { AlertTriangle, CheckCircle, Clock, Activity, HelpCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle, Clock, Activity, HelpCircle, Wrench } from 'lucide-react'
 import EquipmentStatusTable from './components/EquipmentStatusTable'
 import AlertsSection from './components/AlertsSection'
 
@@ -34,11 +34,12 @@ export default async function DashboardPage() {
   const { data: equipments = [] } = await query as { data: EquipmentStatus[] | null }
   const list = equipments ?? []
 
-  const total   = list.length
-  const overdue = list.filter(e => getMaintenanceStatus(e) === 'overdue').length
-  const warning = list.filter(e => getMaintenanceStatus(e) === 'warning').length
-  const ok      = list.filter(e => getMaintenanceStatus(e) === 'ok').length
-  const noData  = list.filter(e => getMaintenanceStatus(e) === 'no_data').length
+  const total    = list.length
+  const overdue  = list.filter(e => getMaintenanceStatus(e) === 'overdue').length
+  const warning  = list.filter(e => getMaintenanceStatus(e) === 'warning').length
+  const ok       = list.filter(e => getMaintenanceStatus(e) === 'ok').length
+  const osAberta = list.filter(e => getMaintenanceStatus(e) === 'os_aberta').length
+  const noData   = list.filter(e => getMaintenanceStatus(e) === 'no_data').length
 
   const alertItems = list
     .filter(e => ['overdue', 'warning'].includes(getMaintenanceStatus(e)))
@@ -58,7 +59,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
         <div className="card flex items-center gap-4">
           <div className="w-11 h-11 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
             <Activity className="w-5 h-5 text-blue-600" />
@@ -93,6 +94,15 @@ export default async function DashboardPage() {
           <div>
             <p className="text-2xl font-bold text-green-600">{ok}</p>
             <p className="text-sm text-gray-500">Em dia</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4">
+          <div className="w-11 h-11 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
+            <Wrench className="w-5 h-5 text-blue-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-blue-600">{osAberta}</p>
+            <p className="text-sm text-gray-500">OS Aberta</p>
           </div>
         </div>
         <div className="card flex items-center gap-4">
