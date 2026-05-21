@@ -132,9 +132,13 @@ export interface EquipmentStatus {
   upcoming_maintenance_plan_name: string | null
   upcoming_maintenance_threshold: number | null
   accumulated_since_maintenance: number | null
+  has_active_os: boolean
+  active_os_number: string | null
+  active_os_status: string | null
+  active_os_id: string | null
 }
 
-export type MaintenanceStatus = 'overdue' | 'warning' | 'ok' | 'no_data'
+export type MaintenanceStatus = 'overdue' | 'warning' | 'ok' | 'no_data' | 'os_aberta'
 
 export type WorkOrderStatus = 'aberta' | 'iniciada' | 'finalizada' | 'cancelada'
 export type WorkOrderType = 'preventive' | 'corrective'
@@ -166,6 +170,7 @@ export interface WorkOrder {
 // Uses the adjusted threshold (accounts for late services) rather than
 // the raw plan interval_value, so delays propagate forward correctly.
 export function getMaintenanceStatus(eq: EquipmentStatus): MaintenanceStatus {
+  if (eq.has_active_os) return 'os_aberta'
   const threshold = eq.next_maintenance_threshold
   if (!eq.current_reading || !threshold) return 'no_data'
   if (eq.current_reading >= threshold) return 'overdue'

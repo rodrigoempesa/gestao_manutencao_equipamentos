@@ -11,11 +11,12 @@ const PAGE_SIZE = 15
 type StatusFilter = MaintenanceStatus | ''
 
 const STATUS_TABS: { key: StatusFilter; label: string; color: string; activeColor: string }[] = [
-  { key: '',         label: 'Todos',     color: 'text-gray-600 border-gray-200 hover:border-gray-300',    activeColor: 'bg-gray-700 text-white border-gray-700' },
-  { key: 'overdue',  label: 'Vencido',   color: 'text-red-600 border-red-200 hover:border-red-400',       activeColor: 'bg-red-600 text-white border-red-600' },
-  { key: 'warning',  label: 'Atenção',   color: 'text-yellow-600 border-yellow-200 hover:border-yellow-400', activeColor: 'bg-yellow-500 text-white border-yellow-500' },
-  { key: 'ok',       label: 'OK',        color: 'text-green-600 border-green-200 hover:border-green-400', activeColor: 'bg-green-600 text-white border-green-600' },
-  { key: 'no_data',  label: 'Sem Dados', color: 'text-gray-500 border-gray-200 hover:border-gray-300',    activeColor: 'bg-gray-500 text-white border-gray-500' },
+  { key: '',          label: 'Todos',     color: 'text-gray-600 border-gray-200 hover:border-gray-300',    activeColor: 'bg-gray-700 text-white border-gray-700' },
+  { key: 'overdue',   label: 'Vencido',   color: 'text-red-600 border-red-200 hover:border-red-400',       activeColor: 'bg-red-600 text-white border-red-600' },
+  { key: 'warning',   label: 'Atenção',   color: 'text-yellow-600 border-yellow-200 hover:border-yellow-400', activeColor: 'bg-yellow-500 text-white border-yellow-500' },
+  { key: 'ok',        label: 'OK',        color: 'text-green-600 border-green-200 hover:border-green-400', activeColor: 'bg-green-600 text-white border-green-600' },
+  { key: 'os_aberta', label: 'OS Aberta', color: 'text-blue-600 border-blue-200 hover:border-blue-400',   activeColor: 'bg-blue-600 text-white border-blue-600' },
+  { key: 'no_data',   label: 'Sem Dados', color: 'text-gray-500 border-gray-200 hover:border-gray-300',   activeColor: 'bg-gray-500 text-white border-gray-500' },
 ]
 
 export default function EquipmentStatusTable({
@@ -33,7 +34,7 @@ export default function EquipmentStatusTable({
   const [page, setPage] = useState(1)
 
   const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = { '': list.length, overdue: 0, warning: 0, ok: 0, no_data: 0 }
+    const counts: Record<string, number> = { '': list.length, overdue: 0, warning: 0, ok: 0, os_aberta: 0, no_data: 0 }
     list.forEach(e => { counts[getMaintenanceStatus(e)]++ })
     return counts
   }, [list])
@@ -69,11 +70,17 @@ export default function EquipmentStatusTable({
   function handleBranch(v: string) { setFilterBranch(v); setPage(1) }
   function handleStatus(v: StatusFilter) { setFilterStatus(v); setPage(1) }
 
-  const statusMap = {
-    overdue: <span className="badge-red">Vencido</span>,
-    warning: <span className="badge-yellow">Atenção</span>,
-    ok: <span className="badge-green">OK</span>,
-    no_data: <span className="badge-gray">Sem dados</span>,
+  const statusBadge = (eq: EquipmentStatus) => {
+    const status = getMaintenanceStatus(eq)
+    if (status === 'os_aberta') return (
+      <a href={`/os/${eq.active_os_id}`} className="badge-blue hover:underline" title={`OS ${eq.active_os_number}`}>
+        OS {eq.active_os_number}
+      </a>
+    )
+    if (status === 'overdue') return <span className="badge-red">Vencido</span>
+    if (status === 'warning') return <span className="badge-yellow">Atenção</span>
+    if (status === 'ok') return <span className="badge-green">OK</span>
+    return <span className="badge-gray">Sem dados</span>
   }
 
   return (
@@ -173,8 +180,8 @@ export default function EquipmentStatusTable({
             )}
             {paginated.map(eq => {
               const status = getMaintenanceStatus(eq)
-              const days = getDaysUntilMaintenance(eq)
-              const upcoming = getUpcomingWarning(eq)
+              const days = status === 'os_aberta' ? null : getDaysUntilMaintenance(eq)
+              const upcoming = status === 'os_aberta' ? null : getUpcomingWarning(eq)
               const relInterval = eq.next_maintenance_threshold !== null && eq.last_maintenance_reading !== null
                 ? eq.next_maintenance_threshold - eq.last_maintenance_reading
                 : eq.next_maintenance_threshold
@@ -237,7 +244,7 @@ export default function EquipmentStatusTable({
                   </td>
                   <td className="table-cell">
                     <div className="space-y-1">
-                      {statusMap[status]}
+                      {statusBadge(eq)}
                       {upcoming && (
                         <div className="flex items-center gap-1 text-orange-600" title={`Faltam ${formatReading(upcoming.remaining, eq.tracking_type)} para ${upcoming.planName} (limite: ${formatReading(upcoming.threshold, eq.tracking_type)})`}>
                           <AlertTriangle className="w-3 h-3 flex-shrink-0" />
