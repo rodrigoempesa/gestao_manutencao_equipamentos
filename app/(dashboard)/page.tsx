@@ -60,46 +60,58 @@ export default async function DashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
-        <div className="card flex flex-col items-center justify-center text-center gap-2">
-          <div className="w-11 h-11 bg-blue-100 rounded-xl flex items-center justify-center">
-            <Activity className="w-5 h-5 text-blue-600" />
+        <div className="card flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
+              <Activity className="w-5 h-5 text-blue-600" />
+            </div>
+            <p className="text-2xl font-bold text-gray-900">{total}</p>
           </div>
-          <p className="text-2xl font-bold text-gray-900">{total}</p>
           <p className="text-sm text-gray-500">Equipamentos</p>
         </div>
-        <div className="card flex flex-col items-center justify-center text-center gap-2">
-          <div className="w-11 h-11 bg-red-100 rounded-xl flex items-center justify-center">
-            <AlertTriangle className="w-5 h-5 text-red-600" />
+        <div className="card flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
+            </div>
+            <p className="text-2xl font-bold text-red-600">{overdue}</p>
           </div>
-          <p className="text-2xl font-bold text-red-600">{overdue}</p>
           <p className="text-sm text-gray-500">Vencidos</p>
         </div>
-        <div className="card flex flex-col items-center justify-center text-center gap-2">
-          <div className="w-11 h-11 bg-yellow-100 rounded-xl flex items-center justify-center">
-            <Clock className="w-5 h-5 text-yellow-600" />
+        <div className="card flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 bg-yellow-100 rounded-xl flex items-center justify-center flex-shrink-0">
+              <Clock className="w-5 h-5 text-yellow-600" />
+            </div>
+            <p className="text-2xl font-bold text-yellow-600">{warning}</p>
           </div>
-          <p className="text-2xl font-bold text-yellow-600">{warning}</p>
           <p className="text-sm text-gray-500">Próximos 30 dias</p>
         </div>
-        <div className="card flex flex-col items-center justify-center text-center gap-2">
-          <div className="w-11 h-11 bg-green-100 rounded-xl flex items-center justify-center">
-            <CheckCircle className="w-5 h-5 text-green-600" />
+        <div className="card flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+            </div>
+            <p className="text-2xl font-bold text-green-600">{ok}</p>
           </div>
-          <p className="text-2xl font-bold text-green-600">{ok}</p>
           <p className="text-sm text-gray-500">Em dia</p>
         </div>
-        <div className="card flex flex-col items-center justify-center text-center gap-2">
-          <div className="w-11 h-11 bg-blue-100 rounded-xl flex items-center justify-center">
-            <Wrench className="w-5 h-5 text-blue-600" />
+        <div className="card flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
+              <Wrench className="w-5 h-5 text-blue-600" />
+            </div>
+            <p className="text-2xl font-bold text-blue-600">{osAberta}</p>
           </div>
-          <p className="text-2xl font-bold text-blue-600">{osAberta}</p>
           <p className="text-sm text-gray-500">OS Aberta</p>
         </div>
-        <div className="card flex flex-col items-center justify-center text-center gap-2">
-          <div className="w-11 h-11 bg-gray-100 rounded-xl flex items-center justify-center">
-            <HelpCircle className="w-5 h-5 text-gray-500" />
+        <div className="card flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 bg-gray-100 rounded-xl flex items-center justify-center flex-shrink-0">
+              <HelpCircle className="w-5 h-5 text-gray-500" />
+            </div>
+            <p className="text-2xl font-bold text-gray-500">{noData}</p>
           </div>
-          <p className="text-2xl font-bold text-gray-500">{noData}</p>
           <p className="text-sm text-gray-500">Sem dados</p>
         </div>
       </div>

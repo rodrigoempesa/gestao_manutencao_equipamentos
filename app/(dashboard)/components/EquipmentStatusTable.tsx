@@ -188,17 +188,16 @@ export default function EquipmentStatusTable({
               return (
                 <tr key={eq.id} className="hover:bg-gray-50 transition-colors">
                   <td className="table-cell">
-                    <p className="font-semibold text-gray-900">{eq.code}</p>
+                    <p className="font-semibold text-gray-900 whitespace-nowrap">{eq.code}</p>
                     <p className="text-xs text-gray-500 truncate max-w-[140px]">{eq.name}</p>
                   </td>
-                  <td className="table-cell">
-                    <p className="text-sm">{eq.branch_name}</p>
-                    <p className="text-xs text-gray-400">{eq.branch_city}/{eq.branch_state}</p>
+                  <td className="table-cell whitespace-nowrap" title={`${eq.branch_city}/${eq.branch_state}`}>
+                    {eq.branch_name ?? '-'}
                   </td>
-                  <td className="table-cell font-mono font-semibold">
+                  <td className="table-cell font-mono font-semibold whitespace-nowrap">
                     {formatReading(eq.current_reading, eq.tracking_type)}
                   </td>
-                  <td className="table-cell">
+                  <td className="table-cell whitespace-nowrap">
                     {eq.accumulated_since_maintenance !== null && relInterval ? (
                       <span className={`font-mono font-semibold ${
                         eq.accumulated_since_maintenance >= relInterval * 0.9
@@ -213,29 +212,19 @@ export default function EquipmentStatusTable({
                       <span className="text-gray-400">-</span>
                     )}
                   </td>
-                  <td className="table-cell text-gray-500">{formatDate(eq.last_reading_date)}</td>
-                  <td className="table-cell text-gray-500">
+                  <td className="table-cell text-gray-500 whitespace-nowrap">{formatDate(eq.last_reading_date)}</td>
+                  <td className="table-cell text-gray-500 whitespace-nowrap">
                     {eq.daily_avg ? formatReading(eq.daily_avg, eq.tracking_type) : '-'}
                   </td>
-                  <td className="table-cell">
-                    {eq.last_maintenance_date ? (
-                      <div>
-                        <p className="text-sm">{formatDate(eq.last_maintenance_date)}</p>
-                        <p className="text-xs text-gray-400">{eq.last_maintenance_plan_name}</p>
-                      </div>
-                    ) : <span className="text-gray-400">-</span>}
+                  <td className="table-cell whitespace-nowrap" title={eq.last_maintenance_plan_name ?? undefined}>
+                    {eq.last_maintenance_date ? formatDate(eq.last_maintenance_date) : <span className="text-gray-400">-</span>}
                   </td>
-                  <td className="table-cell">
+                  <td className="table-cell" title={eq.next_maintenance_plan_name ? `limite: ${formatReading(eq.next_maintenance_threshold, eq.tracking_type)}` : undefined}>
                     {eq.next_maintenance_plan_name ? (
-                      <div>
-                        <p className="text-sm font-medium">{eq.next_maintenance_plan_name}</p>
-                        <p className="text-xs text-gray-400">
-                          limite: {formatReading(eq.next_maintenance_threshold, eq.tracking_type)}
-                        </p>
-                      </div>
+                      <p className="text-sm font-medium truncate max-w-[160px]">{eq.next_maintenance_plan_name}</p>
                     ) : <span className="text-gray-400">-</span>}
                   </td>
-                  <td className="table-cell">
+                  <td className="table-cell whitespace-nowrap">
                     {days !== null ? (
                       <span className={days < 0 ? 'text-red-600 font-semibold' : 'text-gray-700'}>
                         {days < 0 ? `${Math.abs(days)}d vencido` : `${days} dias`}
@@ -243,13 +232,13 @@ export default function EquipmentStatusTable({
                     ) : <span className="text-gray-400">-</span>}
                   </td>
                   <td className="table-cell">
-                    <div className="space-y-1">
+                    <div className="flex items-center gap-1.5">
                       {statusBadge(eq)}
                       {upcoming && (
-                        <div className="flex items-center gap-1 text-orange-600" title={`Faltam ${formatReading(upcoming.remaining, eq.tracking_type)} para ${upcoming.planName} (limite: ${formatReading(upcoming.threshold, eq.tracking_type)})`}>
-                          <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                          <span className="text-xs font-medium">Próx. revisão aprox.</span>
-                        </div>
+                        <AlertTriangle
+                          className="w-3.5 h-3.5 text-orange-500 flex-shrink-0"
+                          title={`Próx. revisão: faltam ${formatReading(upcoming.remaining, eq.tracking_type)} para ${upcoming.planName} (limite: ${formatReading(upcoming.threshold, eq.tracking_type)})`}
+                        />
                       )}
                     </div>
                   </td>
