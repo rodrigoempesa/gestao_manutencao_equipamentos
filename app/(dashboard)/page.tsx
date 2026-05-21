@@ -42,7 +42,7 @@ export default async function DashboardPage() {
   const noData   = list.filter(e => getMaintenanceStatus(e) === 'no_data').length
 
   const alertItems = list
-    .filter(e => ['overdue', 'warning'].includes(getMaintenanceStatus(e)))
+    .filter(e => getMaintenanceStatus(e) === 'overdue')
     .sort((a, b) => {
       const sa = getMaintenanceStatus(a)
       const sb = getMaintenanceStatus(b)
