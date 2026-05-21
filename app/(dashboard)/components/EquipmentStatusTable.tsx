@@ -1,23 +1,42 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import type { EquipmentStatus } from '@/lib/types'
+import type { EquipmentStatus, MaintenanceStatus } from '@/lib/types'
 import { getMaintenanceStatus, getDaysUntilMaintenance, getUpcomingWarning, formatReading } from '@/lib/types'
 import { formatDate } from '@/lib/utils'
 import { Search, X, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react'
 
 const PAGE_SIZE = 15
 
+type StatusFilter = MaintenanceStatus | ''
+
+const STATUS_TABS: { key: StatusFilter; label: string; color: string; activeColor: string }[] = [
+  { key: '',         label: 'Todos',     color: 'text-gray-600 border-gray-200 hover:border-gray-300',    activeColor: 'bg-gray-700 text-white border-gray-700' },
+  { key: 'overdue',  label: 'Vencido',   color: 'text-red-600 border-red-200 hover:border-red-400',       activeColor: 'bg-red-600 text-white border-red-600' },
+  { key: 'warning',  label: 'Atenção',   color: 'text-yellow-600 border-yellow-200 hover:border-yellow-400', activeColor: 'bg-yellow-500 text-white border-yellow-500' },
+  { key: 'ok',       label: 'OK',        color: 'text-green-600 border-green-200 hover:border-green-400', activeColor: 'bg-green-600 text-white border-green-600' },
+  { key: 'no_data',  label: 'Sem Dados', color: 'text-gray-500 border-gray-200 hover:border-gray-300',    activeColor: 'bg-gray-500 text-white border-gray-500' },
+]
+
 export default function EquipmentStatusTable({
   list,
   isAdminGeral,
+  initialStatus = '',
 }: {
   list: EquipmentStatus[]
   isAdminGeral: boolean
+  initialStatus?: StatusFilter
 }) {
   const [search, setSearch] = useState('')
   const [filterBranch, setFilterBranch] = useState('')
+  const [filterStatus, setFilterStatus] = useState<StatusFilter>(initialStatus)
   const [page, setPage] = useState(1)
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = { '': list.length, overdue: 0, warning: 0, ok: 0, no_data: 0 }
+    list.forEach(e => { counts[getMaintenanceStatus(e)]++ })
+    return counts
+  }, [list])
 
   const branches = useMemo(() => {
     const map = new Map<string, { name: string; city: string; state: string }>()
@@ -32,27 +51,23 @@ export default function EquipmentStatusTable({
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return list.filter(e => {
-      if (q && !(
-        e.code.toLowerCase().includes(q) ||
-        e.name.toLowerCase().includes(q)
-      )) return false
+      if (q && !(e.code.toLowerCase().includes(q) || e.name.toLowerCase().includes(q))) return false
       if (filterBranch && e.branch_id !== filterBranch) return false
+      if (filterStatus && getMaintenanceStatus(e) !== filterStatus) return false
       return true
     })
-  }, [list, search, filterBranch])
+  }, [list, search, filterBranch, filterStatus])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
   const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
-  const hasFilters = search || filterBranch
+  const hasFilters = search || filterBranch || filterStatus
 
-  function clearFilters() {
-    setSearch(''); setFilterBranch(''); setPage(1)
-  }
-
+  function clearFilters() { setSearch(''); setFilterBranch(''); setFilterStatus(''); setPage(1) }
   function handleSearch(v: string) { setSearch(v); setPage(1) }
   function handleBranch(v: string) { setFilterBranch(v); setPage(1) }
+  function handleStatus(v: StatusFilter) { setFilterStatus(v); setPage(1) }
 
   const statusMap = {
     overdue: <span className="badge-red">Vencido</span>,
@@ -74,6 +89,27 @@ export default function EquipmentStatusTable({
           </span>
         </div>
 
+        {/* Status filter tabs */}
+        <div className="flex flex-wrap gap-2">
+          {STATUS_TABS.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => handleStatus(tab.key)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                filterStatus === tab.key ? tab.activeColor : tab.color + ' bg-white'
+              }`}
+            >
+              {tab.label}
+              <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
+                filterStatus === tab.key ? 'bg-white/20 text-inherit' : 'bg-gray-100 text-gray-500'
+              }`}>
+                {statusCounts[tab.key] ?? 0}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Search + Branch */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-48">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -104,7 +140,7 @@ export default function EquipmentStatusTable({
               className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 flex-shrink-0"
               onClick={clearFilters}
             >
-              <X className="w-3 h-3" /> Limpar
+              <X className="w-3 h-3" /> Limpar filtros
             </button>
           )}
         </div>
@@ -139,10 +175,9 @@ export default function EquipmentStatusTable({
               const status = getMaintenanceStatus(eq)
               const days = getDaysUntilMaintenance(eq)
               const upcoming = getUpcomingWarning(eq)
-              // Relative interval = threshold − last maintenance reading
               const relInterval = eq.next_maintenance_threshold !== null && eq.last_maintenance_reading !== null
                 ? eq.next_maintenance_threshold - eq.last_maintenance_reading
-                : eq.next_maintenance_threshold // fallback for new equipment (no prior service)
+                : eq.next_maintenance_threshold
               return (
                 <tr key={eq.id} className="hover:bg-gray-50 transition-colors">
                   <td className="table-cell">
