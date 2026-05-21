@@ -20,7 +20,8 @@ begin
   select id into v_700jii from public.equipment_models where brand_id = v_jd and name = '700J II' limit 1;
 
   -- ── 210G → 210GLC ───────────────────────────────────────
-  -- Atualiza product_id, quantity e service_id nos itens já copiados
+  -- UPDATE ... FROM não permite referenciar a tabela alvo em JOINs;
+  -- usamos vírgulas no FROM e todas as condições no WHERE.
   if v_210g is not null and v_210glc is not null then
     update public.maintenance_plan_items dest_item
     set
@@ -28,14 +29,16 @@ begin
       quantity   = src_item.quantity,
       service_id = src_item.service_id
     from
-      public.maintenance_plans dest_plan
-      join public.maintenance_plans src_plan
-        on src_plan.model_id = v_210g and src_plan.interval_value = dest_plan.interval_value
-      join public.maintenance_plan_items src_item
-        on src_item.plan_id = src_plan.id and src_item.order_index = dest_item.order_index
+      public.maintenance_plans  dest_plan,
+      public.maintenance_plans  src_plan,
+      public.maintenance_plan_items src_item
     where
-      dest_item.plan_id = dest_plan.id
-      and dest_plan.model_id = v_210glc;
+      dest_item.plan_id        = dest_plan.id
+      and dest_plan.model_id   = v_210glc
+      and src_plan.model_id    = v_210g
+      and src_plan.interval_value = dest_plan.interval_value
+      and src_item.plan_id     = src_plan.id
+      and src_item.order_index = dest_item.order_index;
   end if;
 
   -- ── 700J → 700J II ──────────────────────────────────────
@@ -46,14 +49,16 @@ begin
       quantity   = src_item.quantity,
       service_id = src_item.service_id
     from
-      public.maintenance_plans dest_plan
-      join public.maintenance_plans src_plan
-        on src_plan.model_id = v_700j and src_plan.interval_value = dest_plan.interval_value
-      join public.maintenance_plan_items src_item
-        on src_item.plan_id = src_plan.id and src_item.order_index = dest_item.order_index
+      public.maintenance_plans  dest_plan,
+      public.maintenance_plans  src_plan,
+      public.maintenance_plan_items src_item
     where
-      dest_item.plan_id = dest_plan.id
-      and dest_plan.model_id = v_700jii;
+      dest_item.plan_id        = dest_plan.id
+      and dest_plan.model_id   = v_700jii
+      and src_plan.model_id    = v_700j
+      and src_plan.interval_value = dest_plan.interval_value
+      and src_item.plan_id     = src_plan.id
+      and src_item.order_index = dest_item.order_index;
   end if;
 
 end $$;
