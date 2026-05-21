@@ -65,6 +65,8 @@ export default function RelatoriosClient({
         return new Date(eq.last_reading_date) < cutoff
       })
       .sort((a, b) => {
+        const brandCmp = (a.brand_name ?? '').localeCompare(b.brand_name ?? '', 'pt-BR')
+        if (brandCmp !== 0) return brandCmp
         if (!a.last_reading_date && !b.last_reading_date) return a.code.localeCompare(b.code, 'pt-BR')
         if (!a.last_reading_date) return -1
         if (!b.last_reading_date) return 1
@@ -112,7 +114,13 @@ export default function RelatoriosClient({
     setPendingList(prev => prev.filter(e => e.id !== eq.id))
   }
 
-  const visiblePending = showInactive ? pendingList : pendingList.filter(eq => eq.active)
+  const visiblePending = (showInactive ? pendingList : pendingList.filter(eq => eq.active))
+    .slice()
+    .sort((a, b) => {
+      const brandCmp = (a.equipment_models?.brands?.name ?? '').localeCompare(b.equipment_models?.brands?.name ?? '', 'pt-BR')
+      if (brandCmp !== 0) return brandCmp
+      return a.code.localeCompare(b.code, 'pt-BR')
+    })
 
   const tabs = [
     { key: 'leituras' as Tab, label: 'Leituras Atrasadas', icon: Clock, count: null },
@@ -430,7 +438,10 @@ export default function RelatoriosClient({
                       Todos os modelos têm planos cadastrados
                     </td>
                   </tr>
-                ) : noPlansModels.map((m: any) => (
+                ) : [...noPlansModels].sort((a, b) =>
+                    (a.brands?.name ?? '').localeCompare(b.brands?.name ?? '', 'pt-BR') ||
+                    a.name.localeCompare(b.name, 'pt-BR')
+                  ).map((m: any) => (
                   <tr key={m.id} className="hover:bg-gray-50">
                     <td className="table-cell text-sm text-gray-600">{m.brands?.name ?? '-'}</td>
                     <td className="table-cell font-semibold text-gray-900">{m.name}</td>
