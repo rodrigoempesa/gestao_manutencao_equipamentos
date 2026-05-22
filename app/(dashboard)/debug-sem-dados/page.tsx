@@ -5,6 +5,8 @@ import { redirect } from 'next/navigation'
 import type { EquipmentStatus } from '@/lib/types'
 import { getMaintenanceStatus, formatReading } from '@/lib/types'
 import { formatDate } from '@/lib/utils'
+import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
 
 export default async function DebugSemDadosPage() {
   const supabase = createClient()
@@ -30,6 +32,9 @@ export default async function DebugSemDadosPage() {
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center gap-3">
+        <Link href="/" className="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-500 hover:text-gray-700">
+          <ArrowLeft className="w-5 h-5" />
+        </Link>
         <h1 className="text-xl font-bold text-gray-700">🔍 Debug — Sem Dados ({noData.length})</h1>
         <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">Página temporária de diagnóstico</span>
       </div>
