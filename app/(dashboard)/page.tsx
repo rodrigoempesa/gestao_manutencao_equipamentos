@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import type { EquipmentStatus } from '@/lib/types'
 import { getMaintenanceStatus } from '@/lib/types'
 import { AlertTriangle, CheckCircle, Clock, Activity, Wrench } from 'lucide-react'
+import Link from 'next/link'
 import EquipmentStatusTable from './components/EquipmentStatusTable'
 import AlertsSection from './components/AlertsSection'
 
@@ -68,7 +69,7 @@ export default async function DashboardPage() {
           </div>
           <p className="text-sm text-gray-500">Equipamentos</p>
         </div>
-        <div className="card flex flex-col gap-2">
+        <Link href="/debug-vencidos" className="card flex flex-col gap-2 hover:shadow-md hover:border-red-200 transition-all cursor-pointer">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
               <AlertTriangle className="w-5 h-5 text-red-600" />
@@ -76,8 +77,8 @@ export default async function DashboardPage() {
             <p className="text-2xl font-bold text-red-600">{overdue}</p>
           </div>
           <p className="text-sm text-gray-500">Vencidos</p>
-        </div>
-        <div className="card flex flex-col gap-2">
+        </Link>
+        <Link href="/debug-proximos" className="card flex flex-col gap-2 hover:shadow-md hover:border-yellow-200 transition-all cursor-pointer">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 bg-yellow-100 rounded-xl flex items-center justify-center flex-shrink-0">
               <Clock className="w-5 h-5 text-yellow-600" />
@@ -85,8 +86,8 @@ export default async function DashboardPage() {
             <p className="text-2xl font-bold text-yellow-600">{warning}</p>
           </div>
           <p className="text-sm text-gray-500">Próximos 30 dias</p>
-        </div>
-        <div className="card flex flex-col gap-2">
+        </Link>
+        <Link href="/debug-em-dia" className="card flex flex-col gap-2 hover:shadow-md hover:border-green-200 transition-all cursor-pointer">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
               <CheckCircle className="w-5 h-5 text-green-600" />
@@ -94,8 +95,8 @@ export default async function DashboardPage() {
             <p className="text-2xl font-bold text-green-600">{ok}</p>
           </div>
           <p className="text-sm text-gray-500">Em dia</p>
-        </div>
-        <div className="card flex flex-col gap-2">
+        </Link>
+        <Link href="/os" className="card flex flex-col gap-2 hover:shadow-md hover:border-blue-200 transition-all cursor-pointer">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
               <Wrench className="w-5 h-5 text-blue-600" />
@@ -103,7 +104,7 @@ export default async function DashboardPage() {
             <p className="text-2xl font-bold text-blue-600">{osAberta}</p>
           </div>
           <p className="text-sm text-gray-500">OS Aberta</p>
-        </div>
+        </Link>
       </div>
 
       {/* Alerts — collapsible after 6 items */}
