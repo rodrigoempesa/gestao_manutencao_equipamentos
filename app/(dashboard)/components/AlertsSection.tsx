@@ -25,6 +25,9 @@ export default function AlertsSection({ items }: { items: EquipmentStatus[] }) {
           const status = getMaintenanceStatus(eq)
           const days = getDaysUntilMaintenance(eq)
           const upcoming = getUpcomingWarning(eq)
+          const overage = status === 'overdue' && eq.current_reading !== null && eq.next_maintenance_threshold !== null
+            ? eq.current_reading - eq.next_maintenance_threshold
+            : null
           return (
             <div
               key={eq.id}
@@ -43,7 +46,7 @@ export default function AlertsSection({ items }: { items: EquipmentStatus[] }) {
                     {eq.code} – {eq.name}
                   </p>
                   <span className={status === 'overdue' ? 'badge-red' : 'badge-yellow'}>
-                    {status === 'overdue' ? 'VENCIDO' : `${days} dias`}
+                    {overage !== null ? `+${formatReading(overage, eq.tracking_type)} vencidas` : `${days} dias`}
                   </span>
                 </div>
                 <p className="text-xs text-gray-500 mt-0.5">{eq.branch_name} · {eq.brand_name} {eq.model_name}</p>

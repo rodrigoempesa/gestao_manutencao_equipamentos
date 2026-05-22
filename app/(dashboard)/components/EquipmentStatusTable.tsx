@@ -180,7 +180,10 @@ export default function EquipmentStatusTable({
             )}
             {paginated.map(eq => {
               const status = getMaintenanceStatus(eq)
-              const days = status === 'os_aberta' ? null : getDaysUntilMaintenance(eq)
+              const days = status === 'os_aberta' || status === 'overdue' ? null : getDaysUntilMaintenance(eq)
+              const overageReading = status === 'overdue' && eq.current_reading !== null && eq.next_maintenance_threshold !== null
+                ? eq.current_reading - eq.next_maintenance_threshold
+                : null
               const upcoming = status === 'os_aberta' ? null : getUpcomingWarning(eq)
               const relInterval = eq.next_maintenance_threshold !== null && eq.last_maintenance_reading !== null
                 ? eq.next_maintenance_threshold - eq.last_maintenance_reading
@@ -225,10 +228,12 @@ export default function EquipmentStatusTable({
                     ) : <span className="text-gray-400">-</span>}
                   </td>
                   <td className="table-cell whitespace-nowrap">
-                    {days !== null ? (
-                      <span className={days < 0 ? 'text-red-600 font-semibold' : 'text-gray-700'}>
-                        {days < 0 ? `${Math.abs(days)}d vencido` : `${days} dias`}
+                    {overageReading !== null ? (
+                      <span className="text-red-600 font-semibold">
+                        +{formatReading(overageReading, eq.tracking_type)} vencidas
                       </span>
+                    ) : days !== null ? (
+                      <span className="text-gray-700">{days} dias</span>
                     ) : <span className="text-gray-400">-</span>}
                   </td>
                   <td className="table-cell">

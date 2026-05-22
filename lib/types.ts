@@ -176,7 +176,7 @@ export function getMaintenanceStatus(eq: EquipmentStatus): MaintenanceStatus {
   if (eq.current_reading >= threshold) return 'overdue'
   if (!eq.daily_avg || eq.daily_avg <= 0) return 'ok'
   const daysLeft = (threshold - eq.current_reading) / eq.daily_avg
-  if (daysLeft <= 15) return 'overdue'
+  if (daysLeft <= 15) return 'warning'
   if (daysLeft <= 30) return 'warning'
   return 'ok'
 }
