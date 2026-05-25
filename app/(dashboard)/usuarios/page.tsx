@@ -202,7 +202,8 @@ export default function UsuariosPage() {
         rows.push({ role: r.value, module_slug: m.slug, enabled: permMatrix[r.value]?.[m.slug] ?? false })
       })
     })
-    await supabase.from('role_module_permissions').upsert(rows, { onConflict: 'role,module_slug' })
+    const { error } = await supabase.rpc('upsert_role_permissions', { p_rows: rows })
+    if (error) console.error('Erro ao salvar permissões:', error.message)
     setPermSaving(false); setPermSaved(true)
     setTimeout(() => setPermSaved(false), 2000)
   }
