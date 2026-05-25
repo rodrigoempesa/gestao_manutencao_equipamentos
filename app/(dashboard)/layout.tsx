@@ -19,14 +19,27 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   if (!profile) redirect('/login')
 
-  // Bloqueia acesso se o tenant estiver inativo (ex: inadimplência)
   const { data: tenant } = await supabase
     .from('tenants')
-    .select('active')
+    .select('active, trial_ends_at, paid')
     .eq('id', (profile as any).tenant_id)
     .single()
 
   if (tenant && !tenant.active) redirect('/login?bloqueado=1')
+
+  // Trial expirado: bloqueia acesso ao dashboard (exceto superadmin)
+  const isSuperadmin = (profile as any).is_superadmin
+  let trialDaysLeft: number | null = null
+
+  if (!isSuperadmin && tenant && !tenant.paid) {
+    if (tenant.trial_ends_at) {
+      const msLeft = new Date(tenant.trial_ends_at).getTime() - Date.now()
+      trialDaysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24))
+      if (trialDaysLeft <= 0) redirect('/trial-expirado')
+    } else {
+      // Tenant sem trial_ends_at = conta antiga, não bloquear
+    }
+  }
 
   // Fetch allowed modules — custom access_profile takes precedence over role defaults
   let allowedModules: string[]
@@ -58,7 +71,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
         admin_geral: ['dashboard','leituras','manutencoes','os','equipamentos','produtos','servicos','planos','solicitacoes','relatorios','filiais','usuarios'],
         admin_local: ['dashboard','leituras','manutencoes','os','equipamentos','produtos','servicos','solicitacoes','relatorios','usuarios'],
         encarregado: ['dashboard','leituras','os'],
-        encarregado: ['dashboard','leituras'],
       }
       allowedModules = defaults[profile.role] ?? ['dashboard']
     }
@@ -68,6 +80,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <div className="flex min-h-screen bg-gray-50">
       <Sidebar profile={profile as Profile} allowedModules={allowedModules} />
       <main className="flex-1 overflow-auto">
+        {trialDaysLeft !== null && trialDaysLeft <= 7 && (
+          <div className={`px-4 lg:px-8 py-2 text-sm font-medium text-center ${
+            trialDaysLeft <= 2
+              ? 'bg-red-600 text-white'
+              : 'bg-amber-400 text-amber-900'
+          }`}>
+            {trialDaysLeft <= 1
+              ? 'Seu período gratuito expira hoje! Entre em contato para continuar usando.'
+              : `Período gratuito: ${trialDaysLeft} dias restantes. Após isso o acesso será bloqueado até a confirmação do pagamento.`
+            }
+          </div>
+        )}
         <div className="p-4 lg:p-8 pt-16 lg:pt-8">
           {children}
         </div>

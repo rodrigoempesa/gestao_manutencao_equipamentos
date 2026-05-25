@@ -40,10 +40,11 @@ export async function POST(request: NextRequest) {
       slug = `${slug}-${Math.random().toString(36).slice(2, 6)}`
     }
 
-    // Criar tenant
+    // Criar tenant com trial de 7 dias
+    const trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
     const { data: tenant, error: tenantError } = await admin
       .from('tenants')
-      .insert({ name: company_name.trim(), slug, plan: selectedPlan })
+      .insert({ name: company_name.trim(), slug, plan: selectedPlan, trial_ends_at: trialEndsAt })
       .select('id')
       .single()
 

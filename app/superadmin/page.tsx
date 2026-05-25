@@ -24,7 +24,7 @@ export default async function SuperadminPage() {
 
   const { data: tenants } = await admin
     .from('tenants')
-    .select('*')
+    .select('id, name, slug, active, plan, trial_ends_at, paid, created_at')
     .order('created_at', { ascending: false })
 
   // Busca contagem de usuários e equipamentos por tenant
