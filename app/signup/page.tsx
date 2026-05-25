@@ -23,17 +23,37 @@ export default function SignupPage() {
 
     try {
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 15000)
+      const timeout = setTimeout(() => controller.abort(), 20000)
 
-      const res = await fetch('/api/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-        signal: controller.signal,
-      })
+      let res: Response
+      try {
+        res = await fetch('/api/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(form),
+          signal: controller.signal,
+        })
+      } catch (fetchErr: any) {
+        clearTimeout(timeout)
+        if (fetchErr.name === 'AbortError') {
+          setError('O servidor demorou muito para responder. Tente novamente.')
+        } else {
+          setError('Erro de rede. Verifique sua conexão e tente novamente.')
+        }
+        setLoading(false)
+        return
+      }
       clearTimeout(timeout)
 
-      const data = await res.json()
+      let data: any = {}
+      try {
+        data = await res.json()
+      } catch {
+        setError(`Erro no servidor (${res.status}). Tente novamente.`)
+        setLoading(false)
+        return
+      }
+
       if (!res.ok) {
         setError(data.error ?? 'Erro ao criar conta')
         setLoading(false)
@@ -42,11 +62,7 @@ export default function SignupPage() {
 
       router.push('/login?cadastro=ok')
     } catch (err: any) {
-      if (err.name === 'AbortError') {
-        setError('O servidor demorou muito para responder. Tente novamente.')
-      } else {
-        setError('Erro de conexão. Verifique sua internet e tente novamente.')
-      }
+      setError('Erro inesperado. Tente novamente.')
       setLoading(false)
     }
   }

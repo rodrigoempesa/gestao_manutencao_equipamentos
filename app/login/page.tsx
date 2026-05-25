@@ -14,13 +14,13 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [cadastroOk, setCadastroOk] = useState(false)
   const [bloqueado, setBloqueado] = useState(false)
-  const [hydrated, setHydrated] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     setCadastroOk(params.get('cadastro') === 'ok')
     setBloqueado(params.get('bloqueado') === '1')
-    setHydrated(true)
+    setMounted(true)
   }, [])
 
   async function handleSubmit(e: React.FormEvent) {
@@ -54,52 +54,61 @@ export default function LoginPage() {
 
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <h2 className="text-xl font-semibold text-gray-900 mb-6">Entrar</h2>
-          {cadastroOk && (
-            <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4">
-              Conta criada com sucesso! Faça login para continuar.
+
+          {!mounted ? (
+            <div className="flex justify-center py-8">
+              <div className="w-6 h-6 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
             </div>
+          ) : (
+            <>
+              {cadastroOk && (
+                <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4">
+                  Conta criada com sucesso! Faça login para continuar.
+                </div>
+              )}
+              {bloqueado && (
+                <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">
+                  O acesso da sua empresa está suspenso. Entre em contato com o suporte.
+                </div>
+              )}
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label className="label" htmlFor="email">E-mail</label>
+                  <input
+                    id="email"
+                    type="email"
+                    className="input"
+                    placeholder="seu@email.com"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    required
+                    autoComplete="email"
+                  />
+                </div>
+                <div>
+                  <label className="label" htmlFor="password">Senha</label>
+                  <input
+                    id="password"
+                    type="password"
+                    className="input"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    required
+                    autoComplete="current-password"
+                  />
+                </div>
+                {error && (
+                  <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                    {error}
+                  </div>
+                )}
+                <button type="submit" className="btn-primary w-full" disabled={loading}>
+                  {loading ? 'Entrando...' : 'Entrar'}
+                </button>
+              </form>
+            </>
           )}
-          {bloqueado && (
-            <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">
-              O acesso da sua empresa está suspenso. Entre em contato com o suporte.
-            </div>
-          )}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="label" htmlFor="email">E-mail</label>
-              <input
-                id="email"
-                type="email"
-                className="input"
-                placeholder="seu@email.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-              />
-            </div>
-            <div>
-              <label className="label" htmlFor="password">Senha</label>
-              <input
-                id="password"
-                type="password"
-                className="input"
-                placeholder="••••••••"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-                autoComplete="current-password"
-              />
-            </div>
-            {error && (
-              <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                {error}
-              </div>
-            )}
-            <button type="submit" className="btn-primary w-full" disabled={loading || !hydrated}>
-              {loading ? 'Entrando...' : 'Entrar'}
-            </button>
-          </form>
         </div>
 
         <p className="text-center text-blue-200 text-sm mt-6">
