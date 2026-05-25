@@ -14,6 +14,10 @@ function slugify(text: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return NextResponse.json({ error: 'Configuração do servidor incompleta. Contate o suporte.' }, { status: 500 })
+  }
+
   const body = await request.json()
   const { company_name, name, email, password } = body
 
