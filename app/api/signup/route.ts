@@ -14,82 +14,93 @@ function slugify(text: string): string {
 }
 
 export async function POST(request: NextRequest) {
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return NextResponse.json({ error: 'Configuração do servidor incompleta. Contate o suporte.' }, { status: 500 })
-  }
-
-  const body = await request.json()
-  const { company_name, name, email, password } = body
-
-  if (!company_name?.trim() || !name?.trim() || !email?.trim() || !password) {
-    return NextResponse.json({ error: 'Todos os campos são obrigatórios' }, { status: 400 })
-  }
-  if (password.length < 6) {
-    return NextResponse.json({ error: 'A senha deve ter pelo menos 6 caracteres' }, { status: 400 })
-  }
-
-  const admin = createAdminClient()
-
-  // Gerar slug único
-  let slug = slugify(company_name.trim()) || 'empresa'
-  const { data: existing } = await admin.from('tenants').select('id').eq('slug', slug).maybeSingle()
-  if (existing) {
-    slug = `${slug}-${Math.random().toString(36).slice(2, 6)}`
-  }
-
-  // Criar tenant
-  const { data: tenant, error: tenantError } = await admin
-    .from('tenants')
-    .insert({ name: company_name.trim(), slug })
-    .select('id')
-    .single()
-
-  if (tenantError) {
-    if (tenantError.code === '23505') {
-      return NextResponse.json({ error: 'Já existe uma empresa com esse nome. Tente um nome diferente.' }, { status: 409 })
+  try {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json({ error: 'Configuração do servidor incompleta. Contate o suporte.' }, { status: 500 })
     }
-    return NextResponse.json({ error: 'Erro ao criar empresa.' }, { status: 500 })
-  }
 
-  // Criar usuário admin já confirmado
-  const { error: userError } = await admin.auth.admin.createUser({
-    email: email.trim().toLowerCase(),
-    password,
-    email_confirm: true,
-    user_metadata: {
-      name: name.trim(),
-      role: 'admin_geral',
-      branch_id: null,
-      tenant_id: tenant.id,
-    },
-  })
+    const body = await request.json()
+    const { company_name, name, email, password } = body
 
-  if (userError) {
-    // Rollback: remove o tenant criado
-    await admin.from('tenants').delete().eq('id', tenant.id)
-    if (userError.message.includes('already registered')) {
-      return NextResponse.json({ error: 'Este e-mail já está cadastrado.' }, { status: 409 })
+    if (!company_name?.trim() || !name?.trim() || !email?.trim() || !password) {
+      return NextResponse.json({ error: 'Todos os campos são obrigatórios' }, { status: 400 })
     }
-    return NextResponse.json({ error: userError.message }, { status: 400 })
-  }
-
-  // Seed permissões padrão para os papéis do novo tenant
-  const { data: modules } = await admin.from('modules').select('slug')
-  if (modules && modules.length > 0) {
-    const defaultEnabled: Record<string, string[]> = {
-      admin_local: ['dashboard', 'leituras', 'manutencoes', 'os', 'equipamentos', 'produtos', 'servicos', 'solicitacoes', 'relatorios', 'usuarios'],
-      encarregado: ['dashboard', 'leituras', 'os'],
+    if (password.length < 6) {
+      return NextResponse.json({ error: 'A senha deve ter pelo menos 6 caracteres' }, { status: 400 })
     }
-    const perms = ['admin_local', 'encarregado'].flatMap(role =>
-      modules.map((m: { slug: string }) => ({
+
+    const admin = createAdminClient()
+
+    // Gerar slug único
+    let slug = slugify(company_name.trim()) || 'empresa'
+    const { data: existing } = await admin.from('tenants').select('id').eq('slug', slug).maybeSingle()
+    if (existing) {
+      slug = `${slug}-${Math.random().toString(36).slice(2, 6)}`
+    }
+
+    // Criar tenant
+    const { data: tenant, error: tenantError } = await admin
+      .from('tenants')
+      .insert({ name: company_name.trim(), slug })
+      .select('id')
+      .single()
+
+    if (tenantError) {
+      console.error('Erro ao criar tenant:', tenantError)
+      if (tenantError.code === '23505') {
+        return NextResponse.json({ error: 'Já existe uma empresa com esse nome. Tente um nome diferente.' }, { status: 409 })
+      }
+      return NextResponse.json({ error: `Erro ao criar empresa: ${tenantError.message}` }, { status: 500 })
+    }
+
+    // Criar usuário admin já confirmado
+    const { error: userError } = await admin.auth.admin.createUser({
+      email: email.trim().toLowerCase(),
+      password,
+      email_confirm: true,
+      user_metadata: {
+        name: name.trim(),
+        role: 'admin_geral',
+        branch_id: null,
         tenant_id: tenant.id,
-        role,
-        module_slug: m.slug,
-        enabled: (defaultEnabled[role] ?? []).includes(m.slug),
-      }))
-    )
-    await admin.from('role_module_permissions').upsert(perms, { onConflict: 'tenant_id,role,module_slug' })
-  }
+      },
+    })
 
-  return NextResponse.json({ success: true })
+    if (userError) {
+      console.error('Erro ao criar usuário:', userError)
+      // Rollback: remove o tenant criado
+      await admin.from('tenants').delete().eq('id', tenant.id)
+      if (userError.message.includes('already registered')) {
+        return NextResponse.json({ error: 'Este e-mail já está cadastrado.' }, { status: 409 })
+      }
+      return NextResponse.json({ error: userError.message }, { status: 400 })
+    }
+
+    // Seed permissões padrão para os papéis do novo tenant (melhor esforço)
+    try {
+      const { data: modules } = await admin.from('modules').select('slug')
+      if (modules && modules.length > 0) {
+        const defaultEnabled: Record<string, string[]> = {
+          admin_local: ['dashboard', 'leituras', 'manutencoes', 'os', 'equipamentos', 'produtos', 'servicos', 'solicitacoes', 'relatorios', 'usuarios'],
+          encarregado: ['dashboard', 'leituras', 'os'],
+        }
+        const perms = ['admin_local', 'encarregado'].flatMap(role =>
+          modules.map((m: { slug: string }) => ({
+            tenant_id: tenant.id,
+            role,
+            module_slug: m.slug,
+            enabled: (defaultEnabled[role] ?? []).includes(m.slug),
+          }))
+        )
+        await admin.from('role_module_permissions').upsert(perms, { onConflict: 'tenant_id,role,module_slug' })
+      }
+    } catch (permError) {
+      console.error('Erro ao seed permissões (não crítico):', permError)
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (err: any) {
+    console.error('Erro inesperado no signup:', err)
+    return NextResponse.json({ error: `Erro interno: ${err?.message ?? 'desconhecido'}` }, { status: 500 })
+  }
 }
