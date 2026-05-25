@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Equipment, EquipmentModel, Branch } from '@/lib/types'
-import { trackingLabel } from '@/lib/utils'
+import { trackingLabel, formatDate } from '@/lib/utils'
 import { ClipboardList, Plus, Pencil, ToggleLeft, ToggleRight, X, Search, SlidersHorizontal, Upload, AlertCircle, CheckCircle2, Download, Wrench, DollarSign, PauseCircle, ArrowRightLeft } from 'lucide-react'
 
 interface FormState {
@@ -81,6 +81,7 @@ export default function EquipamentosPage() {
   const [showInactiveModal, setShowInactiveModal] = useState(false)
   const [inactiveTarget, setInactiveTarget] = useState<Equipment | null>(null)
   const [inactiveReason, setInactiveReason] = useState<'manutencao' | 'vendido' | 'parada' | null>(null)
+  const [inactiveReading, setInactiveReading] = useState('')
 
   // Transfer modal
   const [showTransferModal, setShowTransferModal] = useState(false)
@@ -208,26 +209,40 @@ export default function EquipamentosPage() {
     setSaving(false)
   }
 
-  function toggleActive(eq: Equipment) {
+  async function toggleActive(eq: Equipment) {
     if (eq.active) {
-      // Deactivating — ask for reason first
+      // Deactivating — fetch last reading to pre-fill, then ask for reason
+      const { data: lastReading } = await supabase
+        .from('readings')
+        .select('reading_value')
+        .eq('equipment_id', eq.id)
+        .order('reading_date', { ascending: false })
+        .limit(1)
+        .single()
       setInactiveTarget(eq)
       setInactiveReason(null)
+      setInactiveReading(lastReading ? String(lastReading.reading_value) : '')
       setShowInactiveModal(true)
     } else {
-      // Reactivating — clear reason directly
-      supabase.from('equipment').update({ active: true, inactive_reason: null }).eq('id', eq.id).then(() => loadData())
+      // Reactivating — clear inactivation fields
+      supabase.from('equipment').update({ active: true, inactive_reason: null, inactive_at: null, inactive_reading: null }).eq('id', eq.id).then(() => loadData())
     }
   }
 
   async function confirmDeactivate() {
     if (!inactiveTarget || !inactiveReason) return
     await supabase.from('equipment')
-      .update({ active: false, inactive_reason: inactiveReason })
+      .update({
+        active: false,
+        inactive_reason: inactiveReason,
+        inactive_at: new Date().toISOString(),
+        inactive_reading: inactiveReading ? parseFloat(inactiveReading) : null,
+      })
       .eq('id', inactiveTarget.id)
     setShowInactiveModal(false)
     setInactiveTarget(null)
     setInactiveReason(null)
+    setInactiveReading('')
     loadData()
   }
 
@@ -601,10 +616,19 @@ export default function EquipamentosPage() {
                     <p className="text-xs text-gray-400">{(eq as any).branches?.city}/{(eq as any).branches?.state}</p>
                   </td>
                   <td className="table-cell">
-                    {eq.active
-                      ? <span className="badge-green">Ativo</span>
-                      : <span className="badge-gray">Inativo</span>
-                    }
+                    {eq.active ? (
+                      <span className="badge-green">Ativo</span>
+                    ) : (
+                      <div className="space-y-0.5">
+                        <span className="badge-gray">Inativo</span>
+                        {eq.inactive_at && (
+                          <p className="text-xs text-gray-400">{formatDate(eq.inactive_at)}</p>
+                        )}
+                        {eq.inactive_reading !== null && (
+                          <p className="text-xs text-gray-400 font-mono">{eq.inactive_reading.toLocaleString('pt-BR')}h</p>
+                        )}
+                      </div>
+                    )}
                   </td>
                   {isAdmin && (
                     <td className="table-cell">
@@ -850,7 +874,7 @@ export default function EquipamentosPage() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="px-6 py-5 space-y-3">
+            <div className="px-6 py-5 space-y-4">
               <p className="text-sm text-gray-500">
                 Por que o equipamento <strong>{inactiveTarget.code}</strong> está sendo inativado?
               </p>
@@ -888,6 +912,20 @@ export default function EquipamentosPage() {
                   <DollarSign className="w-7 h-7" />
                   <span className="text-sm font-medium">Vendido</span>
                 </button>
+              </div>
+            </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Horímetro no momento da inativação
+                </label>
+                <input
+                  type="number"
+                  className="input"
+                  placeholder="Ex: 1250"
+                  value={inactiveReading}
+                  onChange={e => setInactiveReading(e.target.value)}
+                />
+                <p className="text-xs text-gray-400 mt-1">Pré-preenchido com a última leitura registrada</p>
               </div>
             </div>
             <div className="px-6 py-4 border-t flex gap-3 justify-end">
