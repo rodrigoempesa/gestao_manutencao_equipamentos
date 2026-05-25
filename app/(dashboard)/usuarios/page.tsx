@@ -131,22 +131,22 @@ export default function UsuariosPage() {
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault(); setInviteError(''); setInviteSuccess(''); setInviting(true)
-    const { error } = await supabase.auth.signUp({
-      email: invite.email,
-      password: invite.password,
-      options: { data: { name: invite.name, role: invite.role, branch_id: invite.branch_id || null } },
-    })
-    if (error) { setInviteError(error.message); setInviting(false); return }
 
-    // If a custom profile was selected, update the profile row after creation
-    if (invite.access_profile_id) {
-      // Small wait for the trigger to create the profile row
-      await new Promise(r => setTimeout(r, 800))
-      const { data: newUser } = await supabase.from('profiles').select('id').eq('email', invite.email).single()
-      if (newUser) {
-        await supabase.from('profiles').update({ access_profile_id: invite.access_profile_id }).eq('id', newUser.id)
-      }
-    }
+    const res = await fetch('/api/usuarios/criar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: invite.email,
+        password: invite.password,
+        name: invite.name,
+        role: invite.role,
+        branch_id: invite.branch_id || null,
+        access_profile_id: invite.access_profile_id || null,
+      }),
+    })
+
+    const data = await res.json()
+    if (!res.ok) { setInviteError(data.error ?? 'Erro ao criar usuário'); setInviting(false); return }
 
     setInviteSuccess(`Usuário ${invite.email} criado com sucesso!`)
     setInvite(emptyInvite())
