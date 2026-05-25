@@ -6,11 +6,18 @@ import { Shield, Users, Wrench, ToggleLeft, ToggleRight, RefreshCw } from 'lucid
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
+const PLAN_LABELS: Record<string, { label: string; color: string }> = {
+  starter:    { label: 'Starter',    color: 'text-gray-300 bg-gray-800 border-gray-700' },
+  pro:        { label: 'Pro',        color: 'text-blue-300 bg-blue-900/50 border-blue-800' },
+  enterprise: { label: 'Enterprise', color: 'text-purple-300 bg-purple-900/50 border-purple-800' },
+}
+
 interface Tenant {
   id: string
   name: string
   slug: string
   active: boolean
+  plan: string
   created_at: string
   user_count: number
   equip_count: number
@@ -87,7 +94,7 @@ export default function SuperadminClient({ tenants: initial }: { tenants: Tenant
             <thead className="bg-gray-800 text-gray-400 text-xs uppercase">
               <tr>
                 <th className="text-left px-5 py-3 font-medium">Empresa</th>
-                <th className="text-left px-5 py-3 font-medium">Slug</th>
+                <th className="text-center px-5 py-3 font-medium">Plano</th>
                 <th className="text-center px-5 py-3 font-medium">
                   <span className="flex items-center justify-center gap-1"><Users className="w-3 h-3" /> Usuários</span>
                 </th>
@@ -104,9 +111,14 @@ export default function SuperadminClient({ tenants: initial }: { tenants: Tenant
                 <tr key={t.id} className="hover:bg-gray-800/50 transition-colors">
                   <td className="px-5 py-4">
                     <p className="font-medium text-white">{t.name}</p>
-                    <p className="text-xs text-gray-500 font-mono">{t.id.slice(0, 8)}…</p>
+                    <p className="text-xs text-gray-500 font-mono">{t.slug}</p>
                   </td>
-                  <td className="px-5 py-4 text-gray-400 text-sm font-mono">{t.slug}</td>
+                  <td className="px-5 py-4 text-center">
+                    {(() => {
+                      const p = PLAN_LABELS[t.plan] ?? PLAN_LABELS.starter
+                      return <span className={`inline-flex text-xs font-medium border px-2 py-0.5 rounded-full ${p.color}`}>{p.label}</span>
+                    })()}
+                  </td>
                   <td className="px-5 py-4 text-center text-gray-300 font-semibold">{t.user_count}</td>
                   <td className="px-5 py-4 text-center text-gray-300 font-semibold">{t.equip_count}</td>
                   <td className="px-5 py-4 text-gray-400 text-sm">{formatDate(t.created_at)}</td>

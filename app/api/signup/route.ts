@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { company_name, name, email, password } = body
+    const { company_name, name, email, password, plan } = body
 
     if (!company_name?.trim() || !name?.trim() || !email?.trim() || !password) {
       return NextResponse.json({ error: 'Todos os campos são obrigatórios' }, { status: 400 })
@@ -28,6 +28,8 @@ export async function POST(request: NextRequest) {
     if (password.length < 6) {
       return NextResponse.json({ error: 'A senha deve ter pelo menos 6 caracteres' }, { status: 400 })
     }
+    const validPlans = ['starter', 'pro', 'enterprise']
+    const selectedPlan = validPlans.includes(plan) ? plan : 'starter'
 
     const admin = createAdminClient()
 
@@ -41,7 +43,7 @@ export async function POST(request: NextRequest) {
     // Criar tenant
     const { data: tenant, error: tenantError } = await admin
       .from('tenants')
-      .insert({ name: company_name.trim(), slug })
+      .insert({ name: company_name.trim(), slug, plan: selectedPlan })
       .select('id')
       .single()
 
