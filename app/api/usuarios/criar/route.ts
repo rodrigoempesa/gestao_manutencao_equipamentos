@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  const { data: profile } = await supabase.from('profiles').select('role, tenant_id').eq('id', user.id).single()
   if (!profile || profile.role !== 'admin_geral') {
     return NextResponse.json({ error: 'Permissão negada' }, { status: 403 })
   }
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     email,
     password,
     email_confirm: true,
-    user_metadata: { name, role, branch_id: branch_id ?? null },
+    user_metadata: { name, role, branch_id: branch_id ?? null, tenant_id: profile.tenant_id },
   })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
