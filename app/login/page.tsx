@@ -1,20 +1,25 @@
 'use client'
 
-import { Suspense, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
-function LoginForm() {
+export default function LoginPage() {
   const router = useRouter()
-  const params = useSearchParams()
-  const cadastroOk = params.get('cadastro') === 'ok'
-  const bloqueado = params.get('bloqueado') === '1'
   const supabase = createClient()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [cadastroOk, setCadastroOk] = useState(false)
+  const [bloqueado, setBloqueado] = useState(false)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    setCadastroOk(params.get('cadastro') === 'ok')
+    setBloqueado(params.get('bloqueado') === '1')
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -103,13 +108,5 @@ function LoginForm() {
         </p>
       </div>
     </div>
-  )
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense fallback={null}>
-      <LoginForm />
-    </Suspense>
   )
 }
