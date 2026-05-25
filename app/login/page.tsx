@@ -1,11 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
+  const params = useSearchParams()
+  const cadastroOk = params.get('cadastro') === 'ok'
   const supabase = createClient()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -43,6 +46,11 @@ export default function LoginPage() {
 
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <h2 className="text-xl font-semibold text-gray-900 mb-6">Entrar</h2>
+          {cadastroOk && (
+            <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4">
+              Conta criada com sucesso! Faça login para continuar.
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="label" htmlFor="email">E-mail</label>
@@ -81,10 +89,21 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="text-center text-blue-300 text-xs mt-6">
-          Entre em contato com o administrador para obter acesso.
+        <p className="text-center text-blue-200 text-sm mt-6">
+          Não tem conta?{' '}
+          <Link href="/signup" className="text-white font-semibold hover:underline">
+            Cadastre sua empresa
+          </Link>
         </p>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   )
 }
