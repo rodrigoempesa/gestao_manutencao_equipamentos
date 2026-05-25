@@ -19,6 +19,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   if (!profile) redirect('/login')
 
+  // Bloqueia acesso se o tenant estiver inativo (ex: inadimplência)
+  const { data: tenant } = await supabase
+    .from('tenants')
+    .select('active')
+    .eq('id', (profile as any).tenant_id)
+    .single()
+
+  if (tenant && !tenant.active) redirect('/login?bloqueado=1')
+
   // Fetch allowed modules — custom access_profile takes precedence over role defaults
   let allowedModules: string[]
 
