@@ -70,6 +70,8 @@ export interface Equipment {
   notes: string | null
   active: boolean
   inactive_reason: 'manutencao' | 'vendido' | 'parada' | null
+  inactive_at: string | null
+  inactive_reading: number | null
   created_at: string
   updated_at: string
   equipment_models?: EquipmentModel & { brands?: Brand }
