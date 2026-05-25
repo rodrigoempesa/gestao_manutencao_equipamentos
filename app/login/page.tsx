@@ -9,6 +9,7 @@ function LoginForm() {
   const router = useRouter()
   const params = useSearchParams()
   const cadastroOk = params.get('cadastro') === 'ok'
+  const bloqueado = params.get('bloqueado') === '1'
   const supabase = createClient()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -49,6 +50,11 @@ function LoginForm() {
           {cadastroOk && (
             <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4">
               Conta criada com sucesso! Faça login para continuar.
+            </div>
+          )}
+          {bloqueado && (
+            <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">
+              O acesso da sua empresa está suspenso. Entre em contato com o suporte.
             </div>
           )}
           <form onSubmit={handleSubmit} className="space-y-4">
