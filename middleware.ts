@@ -32,7 +32,7 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse
   }
 
-  const isPublicPage = pathname.startsWith('/login') || pathname.startsWith('/signup')
+  const isPublicPage = pathname.startsWith('/login') || pathname.startsWith('/signup') || pathname.startsWith('/trial-expirado')
 
   if (!user && !isPublicPage) {
     return NextResponse.redirect(new URL('/login', request.url))
