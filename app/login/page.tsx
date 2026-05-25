@@ -14,11 +14,13 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [cadastroOk, setCadastroOk] = useState(false)
   const [bloqueado, setBloqueado] = useState(false)
+  const [hydrated, setHydrated] = useState(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     setCadastroOk(params.get('cadastro') === 'ok')
     setBloqueado(params.get('bloqueado') === '1')
+    setHydrated(true)
   }, [])
 
   async function handleSubmit(e: React.FormEvent) {
@@ -94,7 +96,7 @@ export default function LoginPage() {
                 {error}
               </div>
             )}
-            <button type="submit" className="btn-primary w-full" disabled={loading}>
+            <button type="submit" className="btn-primary w-full" disabled={loading || !hydrated}>
               {loading ? 'Entrando...' : 'Entrar'}
             </button>
           </form>
