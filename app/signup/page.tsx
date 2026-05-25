@@ -21,20 +21,34 @@ export default function SignupPage() {
     setError('')
     setLoading(true)
 
-    const res = await fetch('/api/signup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    })
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 15000)
 
-    const data = await res.json()
-    if (!res.ok) {
-      setError(data.error ?? 'Erro ao criar conta')
+      const res = await fetch('/api/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+        signal: controller.signal,
+      })
+      clearTimeout(timeout)
+
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error ?? 'Erro ao criar conta')
+        setLoading(false)
+        return
+      }
+
+      router.push('/login?cadastro=ok')
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        setError('O servidor demorou muito para responder. Tente novamente.')
+      } else {
+        setError('Erro de conexão. Verifique sua internet e tente novamente.')
+      }
       setLoading(false)
-      return
     }
-
-    router.push('/login?cadastro=ok')
   }
 
   return (
