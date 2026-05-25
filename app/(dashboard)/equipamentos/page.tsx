@@ -82,6 +82,7 @@ export default function EquipamentosPage() {
   const [inactiveTarget, setInactiveTarget] = useState<Equipment | null>(null)
   const [inactiveReason, setInactiveReason] = useState<'manutencao' | 'vendido' | 'parada' | null>(null)
   const [inactiveReading, setInactiveReading] = useState('')
+  const [inactiveDate, setInactiveDate] = useState('')
 
   // Transfer modal
   const [showTransferModal, setShowTransferModal] = useState(false)
@@ -222,6 +223,7 @@ export default function EquipamentosPage() {
       setInactiveTarget(eq)
       setInactiveReason(null)
       setInactiveReading(lastReading ? String(lastReading.reading_value) : '')
+      setInactiveDate(new Date().toISOString().slice(0, 10))
       setShowInactiveModal(true)
     } else {
       // Reactivating — clear inactivation fields
@@ -235,7 +237,7 @@ export default function EquipamentosPage() {
       .update({
         active: false,
         inactive_reason: inactiveReason,
-        inactive_at: new Date().toISOString(),
+        inactive_at: inactiveDate ? new Date(inactiveDate).toISOString() : new Date().toISOString(),
         inactive_reading: inactiveReading ? parseFloat(inactiveReading) : null,
       })
       .eq('id', inactiveTarget.id)
@@ -243,6 +245,7 @@ export default function EquipamentosPage() {
     setInactiveTarget(null)
     setInactiveReason(null)
     setInactiveReading('')
+    setInactiveDate('')
     loadData()
   }
 
@@ -914,19 +917,33 @@ export default function EquipamentosPage() {
                 </button>
               </div>
             </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Horímetro no momento da inativação
-                </label>
-                <input
-                  type="number"
-                  className="input"
-                  placeholder="Ex: 1250"
-                  value={inactiveReading}
-                  onChange={e => setInactiveReading(e.target.value)}
-                />
-                <p className="text-xs text-gray-400 mt-1">Pré-preenchido com a última leitura registrada</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Data da inativação
+                  </label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={inactiveDate}
+                    max={new Date().toISOString().slice(0, 10)}
+                    onChange={e => setInactiveDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Horímetro
+                  </label>
+                  <input
+                    type="number"
+                    className="input"
+                    placeholder="Ex: 1250"
+                    value={inactiveReading}
+                    onChange={e => setInactiveReading(e.target.value)}
+                  />
+                </div>
               </div>
+              <p className="text-xs text-gray-400 -mt-2">Horímetro pré-preenchido com a última leitura registrada</p>
             </div>
             <div className="px-6 py-4 border-t flex gap-3 justify-end">
               <button className="btn-secondary" onClick={() => setShowInactiveModal(false)}>Cancelar</button>
