@@ -917,6 +917,7 @@ export default function EquipamentosPage() {
                 </button>
               </div>
             </div>
+            <div className="px-6 pb-5 space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -943,7 +944,7 @@ export default function EquipamentosPage() {
                   />
                 </div>
               </div>
-              <p className="text-xs text-gray-400 -mt-2">Horímetro pré-preenchido com a última leitura registrada</p>
+              <p className="text-xs text-gray-400 -mt-1">Horímetro pré-preenchido com a última leitura registrada</p>
             </div>
             <div className="px-6 py-4 border-t flex gap-3 justify-end">
               <button className="btn-secondary" onClick={() => setShowInactiveModal(false)}>Cancelar</button>
