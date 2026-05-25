@@ -26,6 +26,12 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   const pathname = request.nextUrl.pathname
+
+  // Rotas de API gerenciam sua própria autenticação
+  if (pathname.startsWith('/api/')) {
+    return supabaseResponse
+  }
+
   const isPublicPage = pathname.startsWith('/login') || pathname.startsWith('/signup')
 
   if (!user && !isPublicPage) {
