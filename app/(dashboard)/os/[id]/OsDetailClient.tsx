@@ -27,11 +27,17 @@ interface RequestItem {
 }
 interface PurchaseRequest {
   id: string; status: string; notes: string | null; created_at: string
+  plan_id?: string | null
+  maintenance_plans?: { id: string; name: string; interval_value: number } | null
   purchase_request_items?: RequestItem[]
 }
 
 function formatBRL(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+function requestTotal(req: PurchaseRequest): number {
+  return (req.purchase_request_items ?? []).reduce((s, it) => s + it.quantity * it.unit_price, 0)
 }
 
 export default function OsDetailClient({
@@ -41,6 +47,7 @@ export default function OsDetailClient({
   role,
   products,
   purchaseRequests,
+  availableRequests,
 }: {
   os: WorkOrder
   profileMap: Record<string, string>
@@ -48,6 +55,7 @@ export default function OsDetailClient({
   role: string
   products: Product[]
   purchaseRequests: PurchaseRequest[]
+  availableRequests: PurchaseRequest[]
 }) {
   const router = useRouter()
   const eq = os.equipment as any
@@ -71,6 +79,10 @@ export default function OsDetailClient({
   const [materialSaving, setMaterialSaving] = useState(false)
   const [materialError, setMaterialError] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  // Associar solicitação existente
+  const [showAssociate, setShowAssociate] = useState(false)
+  const [associatingId, setAssociatingId] = useState<string | null>(null)
 
   // Modals
   const [modal, setModal] = useState<'start' | 'finish' | 'cancel' | null>(null)
@@ -229,8 +241,18 @@ export default function OsDetailClient({
   async function handleDeleteRequest(id: string) {
     setDeletingId(id)
     const supabase = createClient()
-    await supabase.from('purchase_requests').delete().eq('id', id)
+    // Apenas desvincula da OS (não apaga a solicitação que foi criada à parte)
+    await supabase.from('purchase_requests').update({ work_order_id: null }).eq('id', id)
     setDeletingId(null)
+    router.refresh()
+  }
+
+  async function handleAssociate(id: string) {
+    setAssociatingId(id)
+    const supabase = createClient()
+    await supabase.from('purchase_requests').update({ work_order_id: os.id }).eq('id', id)
+    setAssociatingId(null)
+    setShowAssociate(false)
     router.refresh()
   }
 
@@ -481,12 +503,23 @@ export default function OsDetailClient({
               )}
             </h2>
             {canEditMaterials && (
-              <button
-                onClick={() => { setShowMaterials(true); setDraftItems([newDraft()]); setMaterialNotes(''); setMaterialError('') }}
-                className="btn-primary text-sm"
-              >
-                <Plus className="w-4 h-4" /> Adicionar
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowAssociate(true)}
+                  className="btn-secondary text-sm"
+                >
+                  <ShoppingCart className="w-4 h-4" /> Associar existente
+                  {availableRequests.length > 0 && (
+                    <span className="badge-blue ml-1">{availableRequests.length}</span>
+                  )}
+                </button>
+                <button
+                  onClick={() => { setShowMaterials(true); setDraftItems([newDraft()]); setMaterialNotes(''); setMaterialError('') }}
+                  className="btn-primary text-sm"
+                >
+                  <Plus className="w-4 h-4" /> Adicionar
+                </button>
+              </div>
             )}
           </div>
 
@@ -510,7 +543,7 @@ export default function OsDetailClient({
                           onClick={() => handleDeleteRequest(req.id)}
                           disabled={deletingId === req.id}
                           className="text-gray-400 hover:text-red-600 disabled:opacity-50"
-                          title="Excluir solicitação"
+                          title="Remover desta OS"
                         >
                           {deletingId === req.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                         </button>
@@ -729,6 +762,84 @@ export default function OsDetailClient({
               <button onClick={handleCreateMaterials} disabled={materialSaving || products.length === 0} className="btn-primary">
                 {materialSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />} Salvar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Associar solicitação existente */}
+      {showAssociate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <div>
+                <h2 className="font-semibold flex items-center gap-2">
+                  <ShoppingCart className="w-4 h-4 text-gray-400" /> Associar Solicitação de Compra
+                </h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {eq?.code} — {eq?.name}
+                  {os.type === 'preventive' && plan?.name ? ` · ${plan.name}` : ''}
+                </p>
+              </div>
+              <button onClick={() => setShowAssociate(false)}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-6 py-5 space-y-3">
+              {availableRequests.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-8">
+                  Nenhuma solicitação de compra disponível para este equipamento
+                  {os.type === 'preventive' ? ' e revisão' : ''}.
+                  <br />
+                  <span className="text-gray-400">
+                    Só aparecem solicitações ainda não vinculadas a nenhuma OS.
+                  </span>
+                </p>
+              ) : (
+                availableRequests.map(req => {
+                  const items = req.purchase_request_items ?? []
+                  return (
+                    <div key={req.id} className="border border-gray-200 rounded-xl p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-900">
+                            {req.maintenance_plans?.name ?? 'Solicitação avulsa'}
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            {formatDate(req.created_at)}
+                            {req.notes ? ` · ${req.notes}` : ''}
+                            {` · ${items.length} ${items.length === 1 ? 'item' : 'itens'}`}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleAssociate(req.id)}
+                          disabled={associatingId === req.id}
+                          className="btn-primary text-sm flex-shrink-0"
+                        >
+                          {associatingId === req.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                          Associar
+                        </button>
+                      </div>
+                      {items.length > 0 && (
+                        <ul className="mt-2 text-xs text-gray-500 space-y-0.5">
+                          {items.map(it => (
+                            <li key={it.id} className="flex items-center justify-between gap-2">
+                              <span className="truncate">{it.products?.name ?? it.description}</span>
+                              <span className="font-mono whitespace-nowrap">
+                                {it.quantity.toLocaleString('pt-BR')} {it.unit} · {formatBRL(it.quantity * it.unit_price)}
+                              </span>
+                            </li>
+                          ))}
+                          <li className="flex items-center justify-end pt-1 border-t border-gray-100 font-semibold text-gray-700">
+                            Total: {formatBRL(requestTotal(req))}
+                          </li>
+                        </ul>
+                      )}
+                    </div>
+                  )
+                })
+              )}
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end">
+              <button onClick={() => setShowAssociate(false)} className="btn-secondary">Fechar</button>
             </div>
           </div>
         </div>
