@@ -268,9 +268,6 @@ export default function OsDetailClient({
     router.refresh()
   }
 
-  const planItems = (plan?.maintenance_plan_items ?? [])
-    .slice()
-    .sort((a: any, b: any) => a.order_index - b.order_index)
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -466,28 +463,6 @@ export default function OsDetailClient({
           </div>
         </div>
       </div>
-
-      {/* Itens do plano */}
-      {os.type === 'preventive' && planItems.length > 0 && (
-        <div className="card p-0 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100">
-            <h2 className="section-title">Itens do Plano ({planItems.length})</h2>
-          </div>
-          <div className="divide-y divide-gray-100">
-            {planItems.map((item: any, i: number) => (
-              <div key={item.id} className="px-6 py-3 flex items-center gap-4">
-                <div className="w-6 h-6 rounded border-2 border-gray-200 flex-shrink-0 flex items-center justify-center">
-                  {os.status === 'finalizada' && (
-                    <CheckCircle className="w-4 h-4 text-green-500" />
-                  )}
-                </div>
-                <span className="text-xs text-gray-400 w-5">{i + 1}</span>
-                <p className="text-sm text-gray-700">{item.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Materiais / Solicitação de Compra */}
       {(canEditMaterials || activeRequests.length > 0) && (
