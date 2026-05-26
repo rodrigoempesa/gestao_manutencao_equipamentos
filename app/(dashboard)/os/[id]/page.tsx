@@ -31,9 +31,24 @@ export default async function OsDetailPage({ params }: { params: { id: string } 
 
   // Busca perfis dos envolvidos (opened/started/finished)
   const userIds = [os.opened_by, os.started_by, os.finished_by].filter(Boolean) as string[]
-  const { data: profiles = [] } = userIds.length > 0
-    ? await supabase.from('profiles').select('id, name').in('id', userIds)
-    : { data: [] }
+
+  const [
+    { data: profiles = [] },
+    { data: myProfile },
+    { data: purchaseRequests = [] },
+    { data: products = [] },
+  ] = await Promise.all([
+    userIds.length > 0
+      ? supabase.from('profiles').select('id, name').in('id', userIds)
+      : Promise.resolve({ data: [] as any[] }),
+    supabase.from('profiles').select('role').eq('id', user.id).single(),
+    supabase
+      .from('purchase_requests')
+      .select('*, purchase_request_items(*, products(id, code, name, unit, unit_price))')
+      .eq('work_order_id', params.id)
+      .order('created_at', { ascending: true }),
+    supabase.from('products').select('id, code, name, unit, unit_price').eq('active', true).order('name'),
+  ])
 
   const profileMap = Object.fromEntries((profiles ?? []).map((p: any) => [p.id, p.name]))
 
@@ -42,6 +57,9 @@ export default async function OsDetailPage({ params }: { params: { id: string } 
       os={os}
       profileMap={profileMap}
       currentUserId={user.id}
+      role={myProfile?.role ?? 'encarregado'}
+      products={(products as any[]) ?? []}
+      purchaseRequests={(purchaseRequests as any[]) ?? []}
     />
   )
 }

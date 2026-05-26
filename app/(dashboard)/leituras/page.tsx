@@ -30,6 +30,12 @@ function newEntry(defaultDate: string): BatchEntry {
   return { _key: Math.random().toString(36).slice(2), date: defaultDate, value: '', notes: '', status: 'pending', errorMsg: '' }
 }
 
+const REASON_BADGE: Record<string, { label: string; badge: string }> = {
+  manutencao: { label: 'Manutenção', badge: 'badge-yellow' },
+  parada:     { label: 'Parada',     badge: 'badge-blue' },
+  vendido:    { label: 'Vendido',    badge: 'badge-gray' },
+}
+
 export default function LeiturasPage() {
   const supabase = createClient()
   const [rows, setRows] = useState<EquipmentRow[]>([])
@@ -39,6 +45,8 @@ export default function LeiturasPage() {
   const [profile, setProfile] = useState<{ role: string; branch_id: string | null } | null>(null)
   const [historyModal, setHistoryModal] = useState<{ equipment: Equipment; readings: Reading[] } | null>(null)
   const [allEquipment, setAllEquipment] = useState<Equipment[]>([])
+  const [tab, setTab] = useState<'ativos' | 'inativos'>('ativos')
+  const [inactiveRows, setInactiveRows] = useState<{ equipment: Equipment; lastReading: Reading | null }[]>([])
 
   // Batch modal state
   const [showBatch, setShowBatch] = useState(false)
@@ -130,6 +138,34 @@ export default function LeiturasPage() {
       saved: !!todayMap[eq.id],
       error: '',
     })))
+
+    // Equipamentos inativos (somente consulta de detalhes)
+    let inactiveQuery = supabase
+      .from('equipment')
+      .select('*, equipment_models(*, brands(*)), branches(*)')
+      .eq('active', false)
+      .order('code')
+    if (prof.role !== 'admin_geral' && prof.branch_id) {
+      inactiveQuery = inactiveQuery.eq('branch_id', prof.branch_id)
+    }
+    const { data: inactiveEquip } = await inactiveQuery
+    const inactiveList = (inactiveEquip as Equipment[]) ?? []
+
+    const inactiveLastMap: Record<string, Reading> = {}
+    if (inactiveList.length > 0) {
+      const { data: inactiveReadings } = await supabase
+        .from('readings')
+        .select('*')
+        .in('equipment_id', inactiveList.map(e => e.id))
+        .order('reading_date', { ascending: false })
+      if (inactiveReadings) {
+        for (const r of inactiveReadings) {
+          if (!inactiveLastMap[r.equipment_id]) inactiveLastMap[r.equipment_id] = r
+        }
+      }
+    }
+    setInactiveRows(inactiveList.map(eq => ({ equipment: eq, lastReading: inactiveLastMap[eq.id] ?? null })))
+
     setLoading(false)
   }, [date, supabase])
 
@@ -397,31 +433,56 @@ export default function LeiturasPage() {
           </h1>
           <p className="text-gray-500 text-sm mt-1">Informe o horímetro ou odômetro de cada equipamento</p>
         </div>
-        <div className="flex items-end gap-3">
-          {isAdmin && (
-            <>
-              <button className="btn-secondary" onClick={openCsvImport}>
-                <Upload className="w-4 h-4" /> Importar CSV
-              </button>
-              <button className="btn-secondary" onClick={openBatch}>
-                <ListPlus className="w-4 h-4" /> Leituras em Lote
-              </button>
-            </>
-          )}
-          <input ref={csvFileRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleCsvFile} />
-          <div>
-            <label className="label">Data da leitura</label>
-            <input
-              type="date"
-              className="input"
-              value={date}
-              max={todayISO()}
-              onChange={e => setDate(e.target.value)}
-            />
+        {tab === 'ativos' && (
+          <div className="flex items-end gap-3">
+            {isAdmin && (
+              <>
+                <button className="btn-secondary" onClick={openCsvImport}>
+                  <Upload className="w-4 h-4" /> Importar CSV
+                </button>
+                <button className="btn-secondary" onClick={openBatch}>
+                  <ListPlus className="w-4 h-4" /> Leituras em Lote
+                </button>
+              </>
+            )}
+            <input ref={csvFileRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleCsvFile} />
+            <div>
+              <label className="label">Data da leitura</label>
+              <input
+                type="date"
+                className="input"
+                value={date}
+                max={todayISO()}
+                onChange={e => setDate(e.target.value)}
+              />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
+      {/* Abas */}
+      <div className="flex gap-6 border-b border-gray-200">
+        <button
+          onClick={() => setTab('ativos')}
+          className={`pb-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            tab === 'ativos' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Lançamento
+        </button>
+        <button
+          onClick={() => setTab('inativos')}
+          className={`pb-2 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-2 ${
+            tab === 'inativos' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Inativos
+          {inactiveRows.length > 0 && <span className="badge-gray">{inactiveRows.length}</span>}
+        </button>
+      </div>
+
+      {tab === 'ativos' && (
+        <>
       {rows.length === 0 && (
         <div className="card text-center text-gray-400 py-16">
           Nenhum equipamento encontrado para sua filial.
@@ -515,6 +576,78 @@ export default function LeiturasPage() {
           </div>
         ))}
       </div>
+        </>
+      )}
+
+      {tab === 'inativos' && (
+        inactiveRows.length === 0 ? (
+          <div className="card text-center text-gray-400 py-16">
+            Nenhum equipamento inativo.
+          </div>
+        ) : (
+          <div className="card p-0 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px]">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="table-header">Código</th>
+                    <th className="table-header">Equipamento</th>
+                    <th className="table-header">Filial</th>
+                    <th className="table-header text-right">Última leitura</th>
+                    <th className="table-header text-right">Leitura na inativação</th>
+                    <th className="table-header">Motivo / Desde</th>
+                    <th className="table-header"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {inactiveRows.map(({ equipment: eq, lastReading }) => {
+                    const tt = eq.equipment_models?.tracking_type ?? 'hours'
+                    const reason = REASON_BADGE[eq.inactive_reason ?? '']
+                    return (
+                      <tr key={eq.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="table-cell font-mono font-bold">{eq.code}</td>
+                        <td className="table-cell">
+                          <p className="font-medium">{eq.name}</p>
+                          <p className="text-xs text-gray-400">
+                            {eq.equipment_models?.brands?.name} {eq.equipment_models?.name}
+                          </p>
+                        </td>
+                        <td className="table-cell text-gray-600">{eq.branches?.name}</td>
+                        <td className="table-cell text-right">
+                          {lastReading ? (
+                            <>
+                              <p className="font-mono font-semibold">{formatReading(lastReading.reading_value, tt)}</p>
+                              <p className="text-xs text-gray-400">{formatDate(lastReading.reading_date)}</p>
+                            </>
+                          ) : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="table-cell text-right font-mono">
+                          {eq.inactive_reading !== null
+                            ? formatReading(eq.inactive_reading, tt)
+                            : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="table-cell">
+                          <span className={reason?.badge ?? 'badge-gray'}>{reason?.label ?? 'Inativo'}</span>
+                          {eq.inactive_at && <p className="text-xs text-gray-400 mt-0.5">{formatDate(eq.inactive_at)}</p>}
+                        </td>
+                        <td className="table-cell">
+                          <button
+                            className="btn-secondary py-1 px-2"
+                            title="Histórico de leituras"
+                            onClick={() => openHistory(eq)}
+                          >
+                            <History className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
+      )}
 
       {/* History Modal */}
       {historyModal && (
