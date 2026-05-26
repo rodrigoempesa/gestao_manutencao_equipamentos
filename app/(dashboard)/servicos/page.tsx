@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Hammer, Plus, Pencil, ToggleLeft, ToggleRight, X } from 'lucide-react'
+import ListTotal from '@/components/ListTotal'
 
 interface Service {
   id: string
@@ -127,6 +128,13 @@ export default function ServicosPage() {
             </tbody>
           </table>
         </div>
+        <ListTotal
+          count={services.length}
+          total={services.length}
+          singular="serviço"
+          plural="serviços"
+          className="px-5 py-3 border-t border-gray-100 bg-gray-50 text-right"
+        />
       </div>
 
       {showForm && (

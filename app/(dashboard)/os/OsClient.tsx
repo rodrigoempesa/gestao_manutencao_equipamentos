@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import type { WorkOrder, WorkOrderStatus } from '@/lib/types'
 import { formatDate } from '@/lib/utils'
+import ListTotal from '@/components/ListTotal'
 import { Plus, X, Loader2, ClipboardList, Search, ExternalLink } from 'lucide-react'
 
 const STATUS_LABELS: Record<WorkOrderStatus, string> = {
@@ -242,6 +243,13 @@ export default function OsClient({
             })}
           </tbody>
         </table>
+        <ListTotal
+          count={filtered.length}
+          total={orders.length}
+          singular="OS"
+          plural="OS"
+          className="px-5 py-3 border-t border-gray-100 bg-gray-50 text-right"
+        />
       </div>
 
       {/* Modal Nova OS */}

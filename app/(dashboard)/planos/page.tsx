@@ -6,6 +6,7 @@ import type { Brand, EquipmentModel, MaintenancePlan, MaintenancePlanItem } from
 import { trackingLabel } from '@/lib/utils'
 import { BookOpen, Plus, Pencil, Trash2, X, ChevronDown, ChevronRight, Package, Hammer, ShoppingCart, Search, ListChecks } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import ListTotal from '@/components/ListTotal'
 
 interface Product { id: string; code: string; name: string; unit: string; unit_price: number }
 interface Service { id: string; name: string; unit: string; unit_price: number }
@@ -452,6 +453,13 @@ export default function PlanosPage() {
             </div>
           )
         })}
+        <ListTotal
+          count={models.length}
+          total={models.length}
+          singular="modelo"
+          plural="modelos"
+          className="px-6 py-3 border-t border-gray-100 bg-gray-50 text-right"
+        />
       </div>
 
       {/* Brand Modal */}

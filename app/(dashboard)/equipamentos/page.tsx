@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Equipment, EquipmentModel, Branch } from '@/lib/types'
 import { trackingLabel, formatDate } from '@/lib/utils'
+import ListTotal from '@/components/ListTotal'
 import { ClipboardList, Plus, Pencil, ToggleLeft, ToggleRight, X, Search, SlidersHorizontal, Upload, AlertCircle, CheckCircle2, Download, Wrench, DollarSign, PauseCircle, ArrowRightLeft } from 'lucide-react'
 
 interface FormState {
@@ -657,6 +658,13 @@ export default function EquipamentosPage() {
             </tbody>
           </table>
         </div>
+        <ListTotal
+          count={filtered.length}
+          total={equipment.length}
+          singular="equipamento"
+          plural="equipamentos"
+          className="px-5 py-3 border-t border-gray-100 bg-gray-50 text-right"
+        />
       </div>
 
       {/* Edit/Create Modal */}

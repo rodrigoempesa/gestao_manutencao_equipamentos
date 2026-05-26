@@ -52,8 +52,8 @@ export default async function DebugVencidosPage() {
           const threshold = eq.next_maintenance_threshold
           const accumulated = eq.accumulated_since_maintenance
 
-          const daysOverdue = eq.daily_avg && threshold && eq.current_reading && eq.current_reading >= threshold
-            ? Math.round((eq.current_reading - threshold) / eq.daily_avg)
+          const overageReading = threshold !== null && eq.current_reading !== null && eq.current_reading >= threshold
+            ? eq.current_reading - threshold
             : null
           const daysLeft = eq.daily_avg && threshold && eq.current_reading && eq.current_reading < threshold
             ? Math.round((threshold - eq.current_reading) / eq.daily_avg)
@@ -72,7 +72,7 @@ export default async function DebugVencidosPage() {
                   <span className="text-gray-400 text-sm ml-3">{eq.branch_name} · {eq.brand_name} {eq.model_name}</span>
                 </div>
                 <span className="text-xs bg-red-600 text-white px-2 py-1 rounded font-semibold">
-                  {daysOverdue !== null ? `${daysOverdue}d vencido` : daysLeft !== null ? `${daysLeft}d restantes` : 'VENCIDO'}
+                  {overageReading !== null ? `+${formatReading(overageReading, eq.tracking_type)} excedidas` : daysLeft !== null ? `${daysLeft}d restantes` : 'VENCIDO'}
                 </span>
               </div>
 

@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Branch } from '@/lib/types'
 import { ESTADOS_BRASIL } from '@/lib/utils'
 import { Building2, Plus, Pencil, ToggleLeft, ToggleRight, X, MapPin } from 'lucide-react'
+import ListTotal from '@/components/ListTotal'
 
 interface FormState {
   id: string
@@ -156,6 +157,16 @@ export default function FiliaisPage() {
             ))}
           </div>
         </div>
+      )}
+
+      {branches.length > 0 && (
+        <ListTotal
+          count={branches.length}
+          total={branches.length}
+          singular="filial"
+          plural="filiais"
+          className="px-1 text-right"
+        />
       )}
 
       {/* Modal */}

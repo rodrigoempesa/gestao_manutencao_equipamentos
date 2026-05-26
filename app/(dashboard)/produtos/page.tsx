@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Package, Plus, Pencil, ToggleLeft, ToggleRight, X, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react'
+import ListTotal from '@/components/ListTotal'
 
 interface Product {
   id: string
@@ -220,6 +221,14 @@ export default function ProdutosPage() {
             )}
           </table>
         </div>
+
+        <ListTotal
+          count={filtered.length}
+          total={products.length}
+          singular="produto"
+          plural="produtos"
+          className="px-6 py-3 border-t border-gray-100 bg-gray-50 text-right"
+        />
 
         {totalPages > 1 && (
           <div className="px-6 py-3 border-t border-gray-100 flex items-center justify-between bg-gray-50">

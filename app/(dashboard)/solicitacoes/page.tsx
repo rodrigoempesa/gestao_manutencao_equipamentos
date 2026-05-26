@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Equipment, MaintenancePlan } from '@/lib/types'
 import { formatDate } from '@/lib/utils'
+import ListTotal from '@/components/ListTotal'
 import { useSearchParams } from 'next/navigation'
 import {
   ShoppingCart, Plus, X, Printer, ChevronDown, ChevronRight,
@@ -529,6 +530,15 @@ export default function SolicitacoesPage() {
             </div>
           )
         })}
+        {requests.length > 0 && (
+          <ListTotal
+            count={requests.length}
+            total={requests.length}
+            singular="solicitação"
+            plural="solicitações"
+            className="px-1 pt-1 text-right"
+          />
+        )}
       </div>
 
       {/* Create Modal */}

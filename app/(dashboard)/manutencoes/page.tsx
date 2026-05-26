@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Equipment, MaintenancePlan } from '@/lib/types'
 import { formatReading } from '@/lib/types'
 import { formatDate, todayISO } from '@/lib/utils'
+import ListTotal from '@/components/ListTotal'
 import { Wrench, Plus, X, Filter, ChevronDown, ChevronRight, Clock, Package, DollarSign, AlertCircle, ShoppingCart, Info } from 'lucide-react'
 
 interface Product { id: string; code: string; name: string; unit: string; unit_price: number }
@@ -461,6 +462,15 @@ export default function ManutencoesPage() {
             </div>
           )
         })}
+        {records.length > 0 && (
+          <ListTotal
+            count={filteredRecords.length}
+            total={records.length}
+            singular="manutenção"
+            plural="manutenções"
+            className="px-1 pt-1 text-right"
+          />
+        )}
       </div>
 
       {/* Form Modal */}

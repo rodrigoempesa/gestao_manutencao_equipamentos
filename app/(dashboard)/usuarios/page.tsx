@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Profile, Branch } from '@/lib/types'
 import { formatDate } from '@/lib/utils'
+import ListTotal from '@/components/ListTotal'
 import {
   Users, Plus, Pencil, ToggleRight, ToggleLeft, X,
   ShieldCheck, Settings2, Check, Save, Trash2, Shield,
@@ -385,6 +386,13 @@ export default function UsuariosPage() {
               </tbody>
             </table>
           </div>
+          <ListTotal
+            count={profiles.length}
+            total={profiles.length}
+            singular="usuário"
+            plural="usuários"
+            className="px-5 py-3 border-t border-gray-100 bg-gray-50 text-right"
+          />
         </div>
       )}
 
