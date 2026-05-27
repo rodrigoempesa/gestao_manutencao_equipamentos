@@ -435,8 +435,8 @@ export default function ManutencoesPage() {
                         </span>
                       )}
                       {totalCost > 0 && (
-                        <span className="text-xs font-semibold text-green-700 flex items-center gap-1">
-                          <DollarSign className="w-3 h-3" /> {formatBRL(totalCost)}
+                        <span className="text-xs font-semibold text-green-700">
+                          {formatBRL(totalCost)}
                         </span>
                       )}
                     </div>

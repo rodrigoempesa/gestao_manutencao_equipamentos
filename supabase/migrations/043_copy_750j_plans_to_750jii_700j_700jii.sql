@@ -8,10 +8,12 @@
 --   existam no destino (casados por interval_value).
 -- • Copia os itens de cada plano (descrição, ordem, produto,
 --   quantidade e serviço).
--- • Preserva o tenant_id da origem (a coluna é NOT NULL e o gatilho
---   auto_set_tenant_id não funciona no SQL Editor, que não tem
---   sessão autenticada).
 -- • Idempotente: pode ser executado mais de uma vez sem duplicar.
+--
+-- Observação: as tabelas equipment_models, maintenance_plans e
+-- maintenance_plan_items NÃO possuem coluna tenant_id (não fazem parte
+-- do escopo multi-tenant da migration 037) — por isso nenhuma é
+-- referenciada aqui.
 -- ============================================================
 
 do $$
@@ -45,20 +47,19 @@ begin
     limit 1;
 
     if v_target is null then
-      insert into public.equipment_models (brand_id, name, tracking_type, cycle_duration, tenant_id)
-      select brand_id, v_target_name, tracking_type, cycle_duration, tenant_id
+      insert into public.equipment_models (brand_id, name, tracking_type, cycle_duration)
+      select brand_id, v_target_name, tracking_type, cycle_duration
       from public.equipment_models where id = v_src
       returning id into v_target;
     end if;
 
     -- Copia os planos (apenas os intervalos ainda não existentes no destino)
-    insert into public.maintenance_plans (model_id, name, interval_value, description, tenant_id)
+    insert into public.maintenance_plans (model_id, name, interval_value, description)
     select
       v_target,
       replace(mp.name, '750J', v_target_name),
       mp.interval_value,
-      mp.description,
-      mp.tenant_id
+      mp.description
     from public.maintenance_plans mp
     where mp.model_id = v_src
       and not exists (
@@ -68,15 +69,14 @@ begin
 
     -- Copia os itens dos planos (casando origem x destino por interval_value)
     insert into public.maintenance_plan_items
-      (plan_id, description, order_index, product_id, quantity, service_id, tenant_id)
+      (plan_id, description, order_index, product_id, quantity, service_id)
     select
       dest.id,
       si.description,
       si.order_index,
       si.product_id,
       si.quantity,
-      si.service_id,
-      si.tenant_id
+      si.service_id
     from public.maintenance_plans src
     join public.maintenance_plans dest
       on dest.model_id = v_target and dest.interval_value = src.interval_value
