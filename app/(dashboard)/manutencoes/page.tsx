@@ -6,7 +6,7 @@ import type { Equipment, MaintenancePlan } from '@/lib/types'
 import { formatReading } from '@/lib/types'
 import { formatDate, todayISO } from '@/lib/utils'
 import ListTotal from '@/components/ListTotal'
-import { Wrench, Plus, X, Filter, ChevronDown, ChevronRight, Clock, Package, DollarSign, AlertCircle, ShoppingCart, Info } from 'lucide-react'
+import { Wrench, Plus, X, Filter, ChevronDown, ChevronRight, Clock, Package, DollarSign, AlertCircle, ShoppingCart, Info, Pencil } from 'lucide-react'
 
 interface Product { id: string; code: string; name: string; unit: string; unit_price: number }
 interface Service { id: string; name: string; unit: string; unit_price: number }
@@ -87,6 +87,7 @@ export default function ManutencoesPage() {
   const [materialDiscount, setMaterialDiscount] = useState(0)
 
   const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState(emptyForm())
   const [items, setItems] = useState<RecordItem[]>([newItem()])
   const [saving, setSaving] = useState(false)
@@ -241,10 +242,58 @@ export default function ManutencoesPage() {
     return materialTotal() + (parseFloat(form.labor_cost) || 0)
   }
 
+  function openCreate() {
+    setEditingId(null)
+    setForm(emptyForm())
+    setFilteredPlans([])
+    setItems([newItem()])
+    setLinkedPurchaseReq(null)
+    setMaterialDiscount(0)
+    setError('')
+    setShowForm(true)
+  }
+
+  function openEdit(r: MaintenanceRecord) {
+    const eq = r.equipment as any
+    setEditingId(r.id)
+    setForm({
+      equipment_id: r.equipment_id,
+      plan_id: r.plan_id ?? '',
+      type: r.type,
+      reading_at_maintenance: String(r.reading_at_maintenance),
+      maintenance_date: r.maintenance_date,
+      stopped_at: r.stopped_at ? r.stopped_at.slice(0, 16) : '',
+      resumed_at: r.resumed_at ? r.resumed_at.slice(0, 16) : '',
+      labor_cost: String(r.labor_cost ?? 0),
+      performed_by: r.performed_by ?? '',
+      notes: r.notes ?? '',
+    })
+    setFilteredPlans(eq?.model_id ? plans.filter(p => p.model_id === eq.model_id) : [])
+    const recItems = (r.maintenance_record_items ?? []) as any[]
+    setItems(
+      recItems.length > 0
+        ? recItems.map(it => ({
+            _key: Math.random().toString(36).slice(2),
+            product_id: it.product_id ?? '',
+            service_id: it.service_id ?? '',
+            plan_item_id: it.plan_item_id ?? '',
+            description: it.description ?? '',
+            quantity: String(it.quantity),
+            unit: it.unit ?? 'un',
+            unit_price: String(it.unit_price ?? 0),
+          }))
+        : [newItem()]
+    )
+    setLinkedPurchaseReq(null)
+    setMaterialDiscount(0)
+    setError('')
+    setShowForm(true)
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setError(''); setSaving(true)
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user) { setSaving(false); return }
 
     const payload = {
       equipment_id: form.equipment_id,
@@ -257,29 +306,48 @@ export default function ManutencoesPage() {
       labor_cost: parseFloat(form.labor_cost) || 0,
       performed_by: form.performed_by.trim() || null,
       notes: form.notes.trim() || null,
-      created_by: user.id,
     }
 
-    const { data: rec, error: recErr } = await supabase.from('maintenance_records').insert(payload).select().single()
-    if (recErr) { setError(recErr.message); setSaving(false); return }
-
     const validItems = items.filter(i => i.description.trim() || i.product_id || i.service_id)
-    if (validItems.length > 0) {
-      const itemPayloads = validItems.map(i => ({
-        record_id: rec.id,
-        product_id: i.product_id || null,
-        service_id: i.service_id || null,
-        plan_item_id: i.plan_item_id || null,
-        description: i.description.trim() || products.find(p => p.id === i.product_id)?.name || services.find(s => s.id === i.service_id)?.name || '',
-        quantity: parseFloat(i.quantity) || 1,
-        unit: i.unit,
-        unit_price: parseFloat(i.unit_price) || 0,
-      }))
-      const { error: itemErr } = await supabase.from('maintenance_record_items').insert(itemPayloads)
-      if (itemErr) { setError(itemErr.message); setSaving(false); return }
+    const buildItemPayloads = (recordId: string) => validItems.map(i => ({
+      record_id: recordId,
+      product_id: i.product_id || null,
+      service_id: i.service_id || null,
+      plan_item_id: i.plan_item_id || null,
+      description: i.description.trim() || products.find(p => p.id === i.product_id)?.name || services.find(s => s.id === i.service_id)?.name || '',
+      quantity: parseFloat(i.quantity) || 1,
+      unit: i.unit,
+      unit_price: parseFloat(i.unit_price) || 0,
+    }))
+
+    if (editingId) {
+      const { error: updErr } = await supabase.from('maintenance_records').update(payload).eq('id', editingId)
+      if (updErr) { setError(updErr.message); setSaving(false); return }
+
+      // Substitui os itens: apaga os antigos (gatilho devolve o estoque) e
+      // insere os novos (gatilho baixa o estoque) — resultado líquido correto.
+      const { error: delErr } = await supabase.from('maintenance_record_items').delete().eq('record_id', editingId)
+      if (delErr) { setError(delErr.message); setSaving(false); return }
+
+      if (validItems.length > 0) {
+        const { error: itemErr } = await supabase.from('maintenance_record_items').insert(buildItemPayloads(editingId))
+        if (itemErr) { setError(itemErr.message); setSaving(false); return }
+      }
+    } else {
+      const { data: rec, error: recErr } = await supabase
+        .from('maintenance_records')
+        .insert({ ...payload, created_by: user.id })
+        .select().single()
+      if (recErr) { setError(recErr.message); setSaving(false); return }
+
+      if (validItems.length > 0) {
+        const { error: itemErr } = await supabase.from('maintenance_record_items').insert(buildItemPayloads(rec.id))
+        if (itemErr) { setError(itemErr.message); setSaving(false); return }
+      }
     }
 
     setShowForm(false)
+    setEditingId(null)
     setForm(emptyForm())
     setItems([newItem()])
     loadData()
@@ -319,7 +387,7 @@ export default function ManutencoesPage() {
             <input type="text" className="input pl-9 w-44" placeholder="Filtrar equipamento" value={filterEq} onChange={e => setFilterEq(e.target.value)} />
           </div>
           {isAdmin && (
-            <button className="btn-primary" onClick={() => { setForm(emptyForm()); setFilteredPlans([]); setItems([newItem()]); setError(''); setShowForm(true) }}>
+            <button className="btn-primary" onClick={openCreate}>
               <Plus className="w-4 h-4" /> Registrar
             </button>
           )}
@@ -375,9 +443,14 @@ export default function ManutencoesPage() {
                   </div>
                 </div>
                 {isAdmin && (
-                  <button className="text-red-400 hover:text-red-600 p-1 ml-2 flex-shrink-0" onClick={e => { e.stopPropagation(); deleteRecord(r.id) }}>
-                    <X className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                    <button className="text-gray-400 hover:text-blue-600 p-1" title="Editar" onClick={e => { e.stopPropagation(); openEdit(r) }}>
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button className="text-red-400 hover:text-red-600 p-1" title="Excluir" onClick={e => { e.stopPropagation(); deleteRecord(r.id) }}>
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -478,8 +551,8 @@ export default function ManutencoesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[95vh] flex flex-col">
             <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
-              <h3 className="font-semibold text-lg">Registrar Manutenção</h3>
-              <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+              <h3 className="font-semibold text-lg">{editingId ? 'Editar Manutenção' : 'Registrar Manutenção'}</h3>
+              <button onClick={() => { setShowForm(false); setEditingId(null) }} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
             </div>
 
             <div className="overflow-y-auto flex-1 px-6 py-4">
@@ -723,9 +796,9 @@ export default function ManutencoesPage() {
                 )}
               </span>
               <div className="flex gap-3">
-                <button className="btn-secondary" onClick={() => setShowForm(false)}>Cancelar</button>
+                <button className="btn-secondary" onClick={() => { setShowForm(false); setEditingId(null) }}>Cancelar</button>
                 <button className="btn-primary" form="manut-form" type="submit" disabled={saving}>
-                  {saving ? 'Salvando...' : 'Salvar Manutenção'}
+                  {saving ? 'Salvando...' : editingId ? 'Salvar Alterações' : 'Salvar Manutenção'}
                 </button>
               </div>
             </div>
