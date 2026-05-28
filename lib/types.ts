@@ -130,6 +130,7 @@ export interface EquipmentStatus {
   next_maintenance_interval: number | null
   next_maintenance_plan_name: string | null
   next_maintenance_threshold: number | null
+  next_maintenance_plan_id: string | null
   upcoming_maintenance_interval: number | null
   upcoming_maintenance_plan_name: string | null
   upcoming_maintenance_threshold: number | null

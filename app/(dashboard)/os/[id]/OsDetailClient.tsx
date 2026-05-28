@@ -79,6 +79,37 @@ export default function OsDetailClient({
   const [materialSaving, setMaterialSaving] = useState(false)
   const [materialError, setMaterialError] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [prefilledFromPlan, setPrefilledFromPlan] = useState(false)
+
+  // Itens do plano com produto vinculado (usados para pré-preencher a modal)
+  const planProductItems: DraftItem[] = (((plan?.maintenance_plan_items ?? []) as any[])
+    .filter(pi => pi.product_id && pi.products)
+    .sort((a: any, b: any) => a.order_index - b.order_index)
+    .map((pi: any) => ({
+      _key: Math.random().toString(36).slice(2),
+      product_id: pi.product_id,
+      quantity: String(pi.quantity ?? 1),
+    })))
+
+  const canPrefillFromPlan =
+    os.type === 'preventive' &&
+    !!os.plan_id &&
+    planProductItems.length > 0 &&
+    activeRequests.length === 0
+
+  function openMaterialsModal() {
+    const items = canPrefillFromPlan ? planProductItems : [newDraft()]
+    setDraftItems(items)
+    setMaterialNotes('')
+    setMaterialError('')
+    setPrefilledFromPlan(canPrefillFromPlan)
+    setShowMaterials(true)
+  }
+
+  function closeMaterialsModal() {
+    setShowMaterials(false)
+    setPrefilledFromPlan(false)
+  }
 
   // Associar solicitação existente
   const [showAssociate, setShowAssociate] = useState(false)
@@ -235,6 +266,7 @@ export default function OsDetailClient({
     setShowMaterials(false)
     setDraftItems([newDraft()])
     setMaterialNotes('')
+    setPrefilledFromPlan(false)
     router.refresh()
   }
 
@@ -489,10 +521,12 @@ export default function OsDetailClient({
                   )}
                 </button>
                 <button
-                  onClick={() => { setShowMaterials(true); setDraftItems([newDraft()]); setMaterialNotes(''); setMaterialError('') }}
+                  onClick={openMaterialsModal}
                   className="btn-primary text-sm"
+                  title={canPrefillFromPlan ? `Itens do plano ${plan?.name} serão pré-carregados` : undefined}
                 >
                   <Plus className="w-4 h-4" /> Adicionar
+                  {canPrefillFromPlan && <span className="text-[10px] opacity-80 ml-1">(do plano)</span>}
                 </button>
               </div>
             )}
@@ -676,9 +710,17 @@ export default function OsDetailClient({
               <h2 className="font-semibold flex items-center gap-2">
                 <ShoppingCart className="w-4 h-4 text-gray-400" /> Adicionar Materiais — {os.number}
               </h2>
-              <button onClick={() => setShowMaterials(false)}><X className="w-5 h-5 text-gray-400" /></button>
+              <button onClick={closeMaterialsModal}><X className="w-5 h-5 text-gray-400" /></button>
             </div>
             <div className="overflow-y-auto flex-1 px-6 py-5 space-y-3">
+              {prefilledFromPlan && plan?.name && (
+                <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 text-sm text-emerald-800">
+                  <ShoppingCart className="w-4 h-4 flex-shrink-0 mt-0.5 text-emerald-600" />
+                  <span>
+                    Itens carregados do plano <strong>{plan.name}</strong>. Você pode ajustar quantidades, remover ou adicionar antes de salvar.
+                  </span>
+                </div>
+              )}
               {products.length === 0 && (
                 <p className="text-sm text-gray-500">Nenhum produto ativo cadastrado. Cadastre produtos no estoque primeiro.</p>
               )}
@@ -733,7 +775,7 @@ export default function OsDetailClient({
               {materialError && <p className="text-sm text-red-600">{materialError}</p>}
             </div>
             <div className="px-6 py-4 border-t flex justify-end gap-3">
-              <button onClick={() => setShowMaterials(false)} className="btn-secondary" disabled={materialSaving}>Cancelar</button>
+              <button onClick={closeMaterialsModal} className="btn-secondary" disabled={materialSaving}>Cancelar</button>
               <button onClick={handleCreateMaterials} disabled={materialSaving || products.length === 0} className="btn-primary">
                 {materialSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />} Salvar
               </button>

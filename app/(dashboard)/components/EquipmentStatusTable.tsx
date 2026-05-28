@@ -5,6 +5,7 @@ import type { EquipmentStatus, MaintenanceStatus } from '@/lib/types'
 import { getMaintenanceStatus, getDaysUntilMaintenance, getUpcomingWarning, formatReading } from '@/lib/types'
 import { formatDate } from '@/lib/utils'
 import { Search, X, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react'
+import Link from 'next/link'
 
 const PAGE_SIZE = 15
 
@@ -244,6 +245,15 @@ export default function EquipmentStatusTable({
                           className="w-3.5 h-3.5 text-orange-500 flex-shrink-0"
                           title={`Próx. revisão: faltam ${formatReading(upcoming.remaining, eq.tracking_type)} para ${upcoming.planName} (limite: ${formatReading(upcoming.threshold, eq.tracking_type)})`}
                         />
+                      )}
+                      {(status === 'overdue' || status === 'warning') && eq.next_maintenance_plan_id && (
+                        <Link
+                          href={`/os?equipment=${eq.id}&plan=${eq.next_maintenance_plan_id}`}
+                          className="text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium whitespace-nowrap"
+                          title={`Abrir OS para ${eq.next_maintenance_plan_name ?? 'a próxima revisão'}`}
+                        >
+                          Abrir OS
+                        </Link>
                       )}
                     </div>
                   </td>

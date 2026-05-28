@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import type { WorkOrder, WorkOrderStatus } from '@/lib/types'
@@ -39,6 +39,8 @@ export default function OsClient({
   isAdminGeral: boolean
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const didAutoOpen = useRef(false)
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('')
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
@@ -87,6 +89,30 @@ export default function OsClient({
     setError('')
     setShowModal(true)
   }
+
+  // Auto-abre o modal de criação quando vem com ?equipment=&plan= (dashboard)
+  useEffect(() => {
+    if (didAutoOpen.current) return
+    const equipParam = searchParams.get('equipment')
+    const planParam = searchParams.get('plan')
+    if (!equipParam || equipmentList.length === 0) return
+
+    const eq = equipmentList.find((e: any) => e.id === equipParam)
+    if (!eq) return
+
+    // Só usa o plano se ele pertencer ao modelo do equipamento
+    const validPlans = plansByModel[eq.model_id] ?? []
+    const planMatches = planParam && validPlans.some((p: any) => p.id === planParam)
+
+    didAutoOpen.current = true
+    setType('preventive')
+    setSelectedEquipment(equipParam)
+    setSelectedPlan(planMatches ? (planParam as string) : '')
+    setDescription('')
+    setNotes('')
+    setError('')
+    setShowModal(true)
+  }, [searchParams, equipmentList, plansByModel])
 
   async function handleCreate() {
     if (!selectedEquipment) { setError('Selecione um equipamento.'); return }

@@ -21,7 +21,8 @@ export default async function OsDetailPage({ params }: { params: { id: string } 
       ),
       maintenance_plans:plan_id(
         id, name, interval_value,
-        maintenance_plan_items(id, description, order_index)
+        maintenance_plan_items(id, description, order_index, product_id, quantity,
+          products(id, code, name, unit, unit_price))
       )
     `)
     .eq('id', params.id)
