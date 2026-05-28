@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Equipment, Reading } from '@/lib/types'
 import { formatReading } from '@/lib/types'
 import { todayISO, trackingLabel, formatDate } from '@/lib/utils'
-import { Gauge, Save, Check, AlertTriangle, History, ListPlus, Plus, Trash2, X, CheckCircle2, Upload, Download } from 'lucide-react'
+import { Gauge, Save, Check, AlertTriangle, History, ListPlus, Plus, Trash2, X, CheckCircle2, Upload, Download, MapPin } from 'lucide-react'
 
 interface EquipmentRow {
   equipment: Equipment
@@ -506,6 +506,11 @@ export default function LeiturasPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-gray-900">{row.equipment.code}</span>
                   <span className="text-gray-600 truncate">{row.equipment.name}</span>
+                  {row.equipment.branches?.name && (
+                    <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">
+                      <MapPin className="w-3 h-3" />{row.equipment.branches.name}
+                    </span>
+                  )}
                   {row.saved && (
                     <span className="badge-green flex items-center gap-1">
                       <Check className="w-3 h-3" /> Salvo

@@ -6,7 +6,7 @@ import type { Equipment, MaintenancePlan } from '@/lib/types'
 import { formatReading } from '@/lib/types'
 import { formatDate, todayISO } from '@/lib/utils'
 import ListTotal from '@/components/ListTotal'
-import { Wrench, Plus, X, Filter, ChevronDown, ChevronRight, Clock, Package, DollarSign, AlertCircle, ShoppingCart, Info, Pencil } from 'lucide-react'
+import { Wrench, Plus, X, Filter, ChevronDown, ChevronRight, Clock, Package, DollarSign, AlertCircle, ShoppingCart, Info, Pencil, MapPin } from 'lucide-react'
 
 interface Product { id: string; code: string; name: string; unit: string; unit_price: number }
 interface Service { id: string; name: string; unit: string; unit_price: number }
@@ -105,7 +105,7 @@ export default function ManutencoesPage() {
     setProfile(prof)
 
     let rQuery = supabase.from('maintenance_records')
-      .select(`*, equipment:equipment_id(id, code, name, model_id, branch_id, equipment_models(tracking_type, brands(name))), maintenance_plans:plan_id(name, interval_value), maintenance_record_items(*, products(id,code,name,unit,unit_price), services(id,name,unit))`)
+      .select(`*, equipment:equipment_id(id, code, name, model_id, branch_id, branches(name), equipment_models(tracking_type, brands(name))), maintenance_plans:plan_id(name, interval_value), maintenance_record_items(*, products(id,code,name,unit,unit_price), services(id,name,unit))`)
       .order('maintenance_date', { ascending: false })
       .limit(100)
 
@@ -423,6 +423,11 @@ export default function ManutencoesPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-gray-900">{eq?.code}</span>
                       <span className="text-gray-600 truncate">{eq?.name}</span>
+                      {eq?.branches?.name && (
+                        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">
+                          <MapPin className="w-3 h-3" />{eq.branches.name}
+                        </span>
+                      )}
                       <span className={typeColor}>{typeLabel}</span>
                       {plan && <span className="badge-gray">{plan.name}</span>}
                     </div>
