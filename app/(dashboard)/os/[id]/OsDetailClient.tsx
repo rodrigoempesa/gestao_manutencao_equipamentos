@@ -79,37 +79,64 @@ export default function OsDetailClient({
   const [materialSaving, setMaterialSaving] = useState(false)
   const [materialError, setMaterialError] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [prefilledFromPlan, setPrefilledFromPlan] = useState(false)
 
-  // Itens do plano com produto vinculado (usados para pré-preencher a modal)
-  const planProductItems: DraftItem[] = (((plan?.maintenance_plan_items ?? []) as any[])
+  // Itens do plano com produto vinculado (usados pelo botão "Gerar do plano")
+  interface PlanProductItem {
+    id: string
+    description: string
+    quantity: number
+    product_id: string
+    products: { id: string; code: string; name: string; unit: string; unit_price: number }
+  }
+  const planProductItems: PlanProductItem[] = (((plan?.maintenance_plan_items ?? []) as any[])
     .filter(pi => pi.product_id && pi.products)
-    .sort((a: any, b: any) => a.order_index - b.order_index)
-    .map((pi: any) => ({
-      _key: Math.random().toString(36).slice(2),
-      product_id: pi.product_id,
-      quantity: String(pi.quantity ?? 1),
-    })))
+    .sort((a: any, b: any) => a.order_index - b.order_index))
 
-  const canPrefillFromPlan =
+  const hasPlanProductItems =
     os.type === 'preventive' &&
     !!os.plan_id &&
     planProductItems.length > 0 &&
     activeRequests.length === 0
 
+  // Modal "Gerar do plano" (checkboxes pré-marcados)
+  const [showFromPlan, setShowFromPlan] = useState(false)
+  const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({})
+  const [fromPlanSaving, setFromPlanSaving] = useState(false)
+  const [fromPlanError, setFromPlanError] = useState('')
+
   function openMaterialsModal() {
-    const items = canPrefillFromPlan ? planProductItems : [newDraft()]
-    setDraftItems(items)
+    setDraftItems([newDraft()])
     setMaterialNotes('')
     setMaterialError('')
-    setPrefilledFromPlan(canPrefillFromPlan)
     setShowMaterials(true)
   }
 
   function closeMaterialsModal() {
     setShowMaterials(false)
-    setPrefilledFromPlan(false)
   }
+
+  function openFromPlanModal() {
+    setCheckedItems({})
+    setFromPlanError('')
+    setShowFromPlan(true)
+  }
+
+  function toggleAllPlanItems() {
+    const allChecked = planProductItems.every(pi => checkedItems[pi.id] !== false)
+    if (allChecked) {
+      const map: Record<string, boolean> = {}
+      planProductItems.forEach(pi => { map[pi.id] = false })
+      setCheckedItems(map)
+    } else {
+      setCheckedItems({})
+    }
+  }
+
+  const selectedPlanItems = planProductItems.filter(pi => checkedItems[pi.id] !== false)
+  const fromPlanTotal = selectedPlanItems.reduce(
+    (s, pi) => s + pi.quantity * (pi.products?.unit_price ?? 0),
+    0,
+  )
 
   // Associar solicitação existente
   const [showAssociate, setShowAssociate] = useState(false)
@@ -266,7 +293,49 @@ export default function OsDetailClient({
     setShowMaterials(false)
     setDraftItems([newDraft()])
     setMaterialNotes('')
-    setPrefilledFromPlan(false)
+    router.refresh()
+  }
+
+  async function handleFromPlanConfirm() {
+    if (selectedPlanItems.length === 0) { setFromPlanError('Selecione pelo menos um item.'); return }
+
+    setFromPlanSaving(true); setFromPlanError('')
+    const supabase = createClient()
+
+    const { data: req, error: reqErr } = await supabase
+      .from('purchase_requests')
+      .insert({
+        equipment_id: os.equipment_id,
+        plan_id: os.plan_id,
+        work_order_id: os.id,
+        notes: null,
+        created_by: currentUserId,
+      })
+      .select('id')
+      .single()
+
+    if (reqErr || !req) {
+      setFromPlanSaving(false); setFromPlanError('Erro ao criar a solicitação.'); return
+    }
+
+    const itemPayloads = selectedPlanItems.map(pi => ({
+      request_id: req.id,
+      product_id: pi.product_id,
+      plan_item_id: pi.id,
+      description: pi.description || pi.products?.name || '',
+      quantity: pi.quantity,
+      unit: pi.products?.unit ?? 'un',
+      unit_price: pi.products?.unit_price ?? 0,
+    }))
+
+    const { error: itemsErr } = await supabase.from('purchase_request_items').insert(itemPayloads)
+    if (itemsErr) {
+      await supabase.from('purchase_requests').delete().eq('id', req.id)
+      setFromPlanSaving(false); setFromPlanError('Erro ao salvar os itens.'); return
+    }
+
+    setFromPlanSaving(false)
+    setShowFromPlan(false)
     router.refresh()
   }
 
@@ -520,13 +589,20 @@ export default function OsDetailClient({
                     <span className="badge-blue ml-1">{availableRequests.length}</span>
                   )}
                 </button>
+                {hasPlanProductItems && (
+                  <button
+                    onClick={openFromPlanModal}
+                    className="btn-secondary text-sm text-green-600"
+                    title={`Gerar solicitação com os itens do plano ${plan?.name}`}
+                  >
+                    <ShoppingCart className="w-4 h-4" /> Gerar do plano
+                  </button>
+                )}
                 <button
                   onClick={openMaterialsModal}
                   className="btn-primary text-sm"
-                  title={canPrefillFromPlan ? `Itens do plano ${plan?.name} serão pré-carregados` : undefined}
                 >
                   <Plus className="w-4 h-4" /> Adicionar
-                  {canPrefillFromPlan && <span className="text-[10px] opacity-80 ml-1">(do plano)</span>}
                 </button>
               </div>
             )}
@@ -713,14 +789,6 @@ export default function OsDetailClient({
               <button onClick={closeMaterialsModal}><X className="w-5 h-5 text-gray-400" /></button>
             </div>
             <div className="overflow-y-auto flex-1 px-6 py-5 space-y-3">
-              {prefilledFromPlan && plan?.name && (
-                <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 text-sm text-emerald-800">
-                  <ShoppingCart className="w-4 h-4 flex-shrink-0 mt-0.5 text-emerald-600" />
-                  <span>
-                    Itens carregados do plano <strong>{plan.name}</strong>. Você pode ajustar quantidades, remover ou adicionar antes de salvar.
-                  </span>
-                </div>
-              )}
               {products.length === 0 && (
                 <p className="text-sm text-gray-500">Nenhum produto ativo cadastrado. Cadastre produtos no estoque primeiro.</p>
               )}
@@ -778,6 +846,76 @@ export default function OsDetailClient({
               <button onClick={closeMaterialsModal} className="btn-secondary" disabled={materialSaving}>Cancelar</button>
               <button onClick={handleCreateMaterials} disabled={materialSaving || products.length === 0} className="btn-primary">
                 {materialSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />} Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Gerar do plano (checkboxes) */}
+      {showFromPlan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <div>
+                <h2 className="font-semibold flex items-center gap-2">
+                  <ShoppingCart className="w-4 h-4 text-gray-400" /> Nova Solicitação de Compra
+                </h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {eq?.code} — {eq?.name}{plan?.name ? ` · ${plan.name}` : ''}
+                </p>
+              </div>
+              <button onClick={() => setShowFromPlan(false)}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-6 py-4 space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium text-gray-700">
+                  Itens do plano — <span className="text-blue-700">{selectedPlanItems.length}/{planProductItems.length}</span> selecionados
+                </span>
+                <button onClick={toggleAllPlanItems} className="text-xs text-blue-600 hover:text-blue-800 hover:underline">
+                  {planProductItems.every(pi => checkedItems[pi.id] !== false) ? 'Desmarcar todos' : 'Marcar todos'}
+                </button>
+              </div>
+              <div className="space-y-1">
+                {planProductItems.map(pi => {
+                  const checked = checkedItems[pi.id] !== false
+                  return (
+                    <label key={pi.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => setCheckedItems(prev => ({ ...prev, [pi.id]: prev[pi.id] === false ? true : false }))}
+                        className="mt-1 w-4 h-4"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">{pi.products.code}</span>
+                          <span className="text-gray-700 truncate">{pi.products.name}</span>
+                        </p>
+                      </div>
+                      <div className="text-right text-xs text-gray-500 whitespace-nowrap">
+                        <p>{pi.quantity.toLocaleString('pt-BR')} {pi.products.unit}</p>
+                        <p>{formatBRL(pi.products.unit_price)}</p>
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
+              {fromPlanError && <p className="text-sm text-red-600">{fromPlanError}</p>}
+            </div>
+            <div className="px-6 py-3 border-t bg-gray-50 flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-600">Total estimado selecionado:</span>
+              <span className="text-sm font-bold text-green-700">{formatBRL(fromPlanTotal)}</span>
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end gap-3">
+              <button onClick={() => setShowFromPlan(false)} className="btn-secondary" disabled={fromPlanSaving}>Cancelar</button>
+              <button
+                onClick={handleFromPlanConfirm}
+                disabled={fromPlanSaving || selectedPlanItems.length === 0}
+                className="btn-primary"
+              >
+                {fromPlanSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                Confirmar
               </button>
             </div>
           </div>
