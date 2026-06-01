@@ -922,7 +922,7 @@ export default function SolicitacoesPage() {
         }).length
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
               <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
                 <div>
                   <h3 className="font-semibold text-lg">Confirmar valores da compra</h3>
@@ -941,7 +941,7 @@ export default function SolicitacoesPage() {
                         <th className="text-left px-3 py-2 font-medium text-gray-500 text-xs">Produto</th>
                         <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs w-20">Qtd</th>
                         <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs w-28">Estimado</th>
-                        <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs w-32">Pago (R$)</th>
+                        <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs w-40 min-w-[160px]">Pago (R$)</th>
                         <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs w-28">Subtotal</th>
                       </tr>
                     </thead>
