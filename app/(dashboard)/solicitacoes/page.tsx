@@ -9,7 +9,7 @@ import { useSearchParams } from 'next/navigation'
 import {
   ShoppingCart, Plus, X, Printer, ChevronDown, ChevronRight,
   Package, CheckCircle, XCircle, Clock, Truck, Paperclip,
-  FileText, Eye, Upload, Loader2,
+  FileText, Eye, Upload, Loader2, Pencil,
 } from 'lucide-react'
 
 interface Product { id: string; code: string; name: string; unit: string; unit_price: number }
@@ -79,8 +79,9 @@ export default function SolicitacoesPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  // Approval modal state
+  // Approval / Edit modal state
   const [showApproval, setShowApproval] = useState(false)
+  const [approvalMode, setApprovalMode] = useState<'approve' | 'edit'>('approve')
   const [approvalTarget, setApprovalTarget] = useState<PurchaseRequest | null>(null)
   // Preço pago por item (string formatada "1234,56"), indexado por id do item
   const [paidPrices, setPaidPrices] = useState<Record<string, string>>({})
@@ -227,12 +228,31 @@ export default function SolicitacoesPage() {
 
   function openApproval(req: PurchaseRequest) {
     setApprovalTarget(req)
+    setApprovalMode('approve')
     const initial: Record<string, string> = {}
     ;(req.purchase_request_items ?? []).forEach(item => {
       initial[item.id] = item.unit_price.toFixed(2).replace('.', ',')
     })
     setPaidPrices(initial)
     setTotalDiscount('')
+    setUpdateCatalog(false)
+    setShowApproval(true)
+  }
+
+  function openEditValues(req: PurchaseRequest) {
+    setApprovalTarget(req)
+    setApprovalMode('edit')
+    const initial: Record<string, string> = {}
+    ;(req.purchase_request_items ?? []).forEach(item => {
+      initial[item.id] = item.unit_price.toFixed(2).replace('.', ',')
+    })
+    setPaidPrices(initial)
+    // Pré-preenche o desconto a partir do final_amount atual (subtotal − final)
+    const subtotal = (req.purchase_request_items ?? []).reduce((s, it) => s + it.quantity * it.unit_price, 0)
+    const inferredDiscount = req.final_amount != null && req.final_amount < subtotal
+      ? subtotal - req.final_amount
+      : 0
+    setTotalDiscount(inferredDiscount > 0.0001 ? inferredDiscount.toFixed(2).replace('.', ',') : '')
     setUpdateCatalog(false)
     setShowApproval(true)
   }
@@ -296,19 +316,27 @@ export default function SolicitacoesPage() {
       }
     }
 
-    // 3) Soma o valor final e aprova (trigger DB baixa o estoque e avança para concluído)
+    // 3) Soma o valor final
     const subtotal = items.reduce((s, it) => s + it.quantity * parsedPaid[it.id], 0)
     const discountRaw = parseBRL(totalDiscount)
     const discount = isNaN(discountRaw) || discountRaw < 0 ? 0 : discountRaw
     const finalAmount = Math.max(0, subtotal - discount)
-    const { error: updErr } = await supabase.from('purchase_requests').update({
-      status: 'aprovado',
-      final_amount: finalAmount,
-    }).eq('id', approvalTarget.id)
+
+    // No modo "approve" muda o status (dispara o gatilho de estoque).
+    // No modo "edit" apenas atualiza o final_amount, sem mexer no estoque.
+    const updatePayload: Record<string, unknown> = { final_amount: finalAmount }
+    if (approvalMode === 'approve') updatePayload.status = 'aprovado'
+
+    const { error: updErr } = await supabase
+      .from('purchase_requests')
+      .update(updatePayload)
+      .eq('id', approvalTarget.id)
 
     if (updErr) {
       setSaving(false)
-      alert('Erro ao aprovar a solicitação: ' + updErr.message)
+      alert(approvalMode === 'approve'
+        ? 'Erro ao aprovar a solicitação: ' + updErr.message
+        : 'Erro ao salvar alterações: ' + updErr.message)
       return
     }
 
@@ -464,6 +492,15 @@ export default function SolicitacoesPage() {
                       <option value="aprovado">Aprovar (atualiza estoque)</option>
                       <option value="cancelado">Cancelar</option>
                     </select>
+                  )}
+                  {req.status === 'concluido' && (
+                    <button
+                      className="btn-secondary py-1 px-2"
+                      title="Editar valor pago"
+                      onClick={() => openEditValues(req)}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
                   )}
                   <button
                     className="btn-secondary py-1 px-2"
@@ -935,9 +972,13 @@ export default function SolicitacoesPage() {
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
               <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
                 <div>
-                  <h3 className="font-semibold text-lg">Confirmar valores da compra</h3>
+                  <h3 className="font-semibold text-lg">
+                    {approvalMode === 'edit' ? 'Editar valores da compra' : 'Confirmar valores da compra'}
+                  </h3>
                   <p className="text-xs text-gray-400 mt-0.5">
-                    Ajuste o preço pago por item. O estoque será atualizado e o total recalculado automaticamente.
+                    {approvalMode === 'edit'
+                      ? 'Ajuste o preço pago por item e/ou o desconto. O estoque não é alterado (já foi baixado na aprovação).'
+                      : 'Ajuste o preço pago por item. O estoque será atualizado e o total recalculado automaticamente.'}
                   </p>
                 </div>
                 <button onClick={() => setShowApproval(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
@@ -1056,7 +1097,9 @@ export default function SolicitacoesPage() {
                   onClick={confirmApproval}
                   disabled={saving}
                 >
-                  {saving ? 'Aprovando...' : 'Confirmar Aprovação'}
+                  {saving
+                    ? (approvalMode === 'edit' ? 'Salvando...' : 'Aprovando...')
+                    : (approvalMode === 'edit' ? 'Salvar Alterações' : 'Confirmar Aprovação')}
                 </button>
               </div>
             </div>
