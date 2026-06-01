@@ -1,9 +1,18 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, Fragment } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Package, Plus, Pencil, ToggleLeft, ToggleRight, X, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Package, Plus, Pencil, ToggleLeft, ToggleRight, X, AlertTriangle, ChevronLeft, ChevronRight, ChevronDown, History } from 'lucide-react'
 import ListTotal from '@/components/ListTotal'
+import { formatDate } from '@/lib/utils'
+
+interface PriceHistoryEntry {
+  id: string
+  quantity: number
+  unit_price: number
+  request_id: string
+  purchase_requests?: { id: string; created_at: string; status: string } | null
+}
 
 interface Product {
   id: string
@@ -57,6 +66,36 @@ export default function ProdutosPage() {
   const [showStockModal, setShowStockModal] = useState<Product | null>(null)
   const [stockAdjust, setStockAdjust] = useState('')
   const [stockType, setStockType] = useState<'add' | 'remove' | 'set'>('add')
+
+  // Histórico de preços por produto (carregamento sob demanda)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [historyCache, setHistoryCache] = useState<Record<string, PriceHistoryEntry[]>>({})
+  const [historyLoading, setHistoryLoading] = useState<Record<string, boolean>>({})
+
+  async function loadHistory(productId: string) {
+    if (historyCache[productId]) return
+    setHistoryLoading(prev => ({ ...prev, [productId]: true }))
+    const { data } = await supabase
+      .from('purchase_request_items')
+      .select('id, quantity, unit_price, request_id, purchase_requests:request_id(id, created_at, status)')
+      .eq('product_id', productId)
+      .limit(50)
+    const list = (((data ?? []) as any[]) as PriceHistoryEntry[])
+      .filter(r => r.purchase_requests?.status === 'concluido')
+      .sort((a, b) => (b.purchase_requests?.created_at ?? '').localeCompare(a.purchase_requests?.created_at ?? ''))
+      .slice(0, 10)
+    setHistoryCache(prev => ({ ...prev, [productId]: list }))
+    setHistoryLoading(prev => ({ ...prev, [productId]: false }))
+  }
+
+  function toggleExpand(productId: string) {
+    if (expandedId === productId) {
+      setExpandedId(null)
+    } else {
+      setExpandedId(productId)
+      loadHistory(productId)
+    }
+  }
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -176,35 +215,105 @@ export default function ProdutosPage() {
               )}
               {paginated.map(p => {
                 const belowMin = p.active && p.min_stock > 0 && p.current_stock <= p.min_stock
+                const isExpanded = expandedId === p.id
+                const history = historyCache[p.id]
+                const isHistoryLoading = historyLoading[p.id]
                 return (
-                  <tr key={p.id} className={`hover:bg-gray-50 transition-colors ${!p.active ? 'opacity-50' : ''}`}>
-                    <td className="table-cell font-mono font-bold">{p.code}</td>
-                    <td className="table-cell font-medium">{p.name}</td>
-                    <td className="table-cell text-gray-500">{p.category ?? '-'}</td>
-                    <td className="table-cell">{p.unit}</td>
-                    <td className="table-cell text-right">
-                      <span className={belowMin ? 'text-red-600 font-bold' : 'font-semibold'}>
-                        {p.current_stock.toLocaleString('pt-BR')}
-                      </span>
-                      {belowMin && <span className="ml-1 badge-red">Baixo</span>}
-                    </td>
-                    <td className="table-cell text-right font-mono">{formatBRL(p.unit_price)}</td>
-                    <td className="table-cell text-right font-mono font-semibold">{formatBRL(p.current_stock * p.unit_price)}</td>
-                    <td className="table-cell">{p.active ? <span className="badge-green">Ativo</span> : <span className="badge-gray">Inativo</span>}</td>
-                    <td className="table-cell">
-                      <div className="flex gap-1.5">
-                        <button className="btn-secondary py-1 px-2 text-xs" onClick={() => { setShowStockModal(p); setStockAdjust(''); setStockType('add') }} title="Ajustar estoque">
-                          <Package className="w-3.5 h-3.5" />
+                  <Fragment key={p.id}>
+                    <tr className={`hover:bg-gray-50 transition-colors ${!p.active ? 'opacity-50' : ''}`}>
+                      <td className="table-cell font-mono font-bold">
+                        <button
+                          onClick={() => toggleExpand(p.id)}
+                          className="inline-flex items-center gap-1 hover:text-blue-600"
+                          title="Ver histórico de preços pagos"
+                        >
+                          {isExpanded
+                            ? <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+                            : <ChevronRight className="w-3.5 h-3.5 text-gray-400" />}
+                          <span>{p.code}</span>
                         </button>
-                        <button className="btn-secondary py-1 px-2" onClick={() => { setForm({ id: p.id, code: p.code, name: p.name, unit: p.unit, current_stock: String(p.current_stock), min_stock: String(p.min_stock), unit_price: String(p.unit_price), category: p.category ?? '', notes: p.notes ?? '', active: p.active }); setError(''); setShowForm(true) }}>
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button className={`btn-secondary py-1 px-2 ${p.active ? 'text-red-500' : 'text-green-600'}`} onClick={() => toggleActive(p)}>
-                          {p.active ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                      </td>
+                      <td className="table-cell font-medium">{p.name}</td>
+                      <td className="table-cell text-gray-500">{p.category ?? '-'}</td>
+                      <td className="table-cell">{p.unit}</td>
+                      <td className="table-cell text-right">
+                        <span className={belowMin ? 'text-red-600 font-bold' : 'font-semibold'}>
+                          {p.current_stock.toLocaleString('pt-BR')}
+                        </span>
+                        {belowMin && <span className="ml-1 badge-red">Baixo</span>}
+                      </td>
+                      <td className="table-cell text-right font-mono">{formatBRL(p.unit_price)}</td>
+                      <td className="table-cell text-right font-mono font-semibold">{formatBRL(p.current_stock * p.unit_price)}</td>
+                      <td className="table-cell">{p.active ? <span className="badge-green">Ativo</span> : <span className="badge-gray">Inativo</span>}</td>
+                      <td className="table-cell">
+                        <div className="flex gap-1.5">
+                          <button className="btn-secondary py-1 px-2 text-xs" onClick={() => { setShowStockModal(p); setStockAdjust(''); setStockType('add') }} title="Ajustar estoque">
+                            <Package className="w-3.5 h-3.5" />
+                          </button>
+                          <button className="btn-secondary py-1 px-2" onClick={() => { setForm({ id: p.id, code: p.code, name: p.name, unit: p.unit, current_stock: String(p.current_stock), min_stock: String(p.min_stock), unit_price: String(p.unit_price), category: p.category ?? '', notes: p.notes ?? '', active: p.active }); setError(''); setShowForm(true) }}>
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button className={`btn-secondary py-1 px-2 ${p.active ? 'text-red-500' : 'text-green-600'}`} onClick={() => toggleActive(p)}>
+                            {p.active ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="bg-blue-50/30">
+                        <td colSpan={9} className="px-6 py-3">
+                          <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                            <History className="w-3.5 h-3.5" />
+                            Histórico de preços pagos
+                            <span className="text-gray-400 font-normal normal-case text-[11px]">
+                              · catálogo: {formatBRL(p.unit_price)}
+                            </span>
+                          </div>
+                          {isHistoryLoading ? (
+                            <p className="text-xs text-gray-400 py-2">Carregando...</p>
+                          ) : !history || history.length === 0 ? (
+                            <p className="text-xs text-gray-400 py-2">Nenhuma compra concluída registrada para este produto.</p>
+                          ) : (
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="text-gray-400 text-[11px]">
+                                  <th className="text-left font-medium py-1">Data</th>
+                                  <th className="text-right font-medium py-1">Quantidade</th>
+                                  <th className="text-right font-medium py-1">Preço pago</th>
+                                  <th className="text-right font-medium py-1">Variação</th>
+                                  <th className="text-right font-medium py-1">Subtotal</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-blue-100">
+                                {history.map((h, idx) => {
+                                  const prev = history[idx + 1]
+                                  const diff = prev ? h.unit_price - prev.unit_price : null
+                                  const pct = diff !== null && prev && prev.unit_price > 0 ? (diff / prev.unit_price) * 100 : null
+                                  return (
+                                    <tr key={h.id}>
+                                      <td className="py-1.5 text-gray-600">{formatDate(h.purchase_requests?.created_at ?? null)}</td>
+                                      <td className="py-1.5 text-right font-mono text-gray-600">{h.quantity.toLocaleString('pt-BR')} {p.unit}</td>
+                                      <td className="py-1.5 text-right font-mono font-semibold">{formatBRL(h.unit_price)}</td>
+                                      <td className="py-1.5 text-right font-mono">
+                                        {pct === null ? (
+                                          <span className="text-gray-300">—</span>
+                                        ) : (
+                                          <span className={pct > 0 ? 'text-red-600' : pct < 0 ? 'text-emerald-600' : 'text-gray-400'}>
+                                            {pct > 0 ? '+' : ''}{pct.toFixed(1).replace('.', ',')}%
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="py-1.5 text-right font-mono text-gray-600">{formatBRL(h.quantity * h.unit_price)}</td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 )
               })}
             </tbody>

@@ -82,7 +82,9 @@ export default function SolicitacoesPage() {
   // Approval modal state
   const [showApproval, setShowApproval] = useState(false)
   const [approvalTarget, setApprovalTarget] = useState<PurchaseRequest | null>(null)
-  const [finalAmount, setFinalAmount] = useState('')
+  // Preço pago por item (string formatada "1234,56"), indexado por id do item
+  const [paidPrices, setPaidPrices] = useState<Record<string, string>>({})
+  const [updateCatalog, setUpdateCatalog] = useState(false)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -222,23 +224,92 @@ export default function SolicitacoesPage() {
   }
 
   function openApproval(req: PurchaseRequest) {
-    const estimated = requestTotal(req)
     setApprovalTarget(req)
-    setFinalAmount(estimated > 0 ? estimated.toFixed(2).replace('.', ',') : '')
+    const initial: Record<string, string> = {}
+    ;(req.purchase_request_items ?? []).forEach(item => {
+      initial[item.id] = item.unit_price.toFixed(2).replace('.', ',')
+    })
+    setPaidPrices(initial)
+    setUpdateCatalog(false)
     setShowApproval(true)
+  }
+
+  function parseBRL(s: string): number {
+    if (!s) return NaN
+    const raw = s.replace(/\./g, '').replace(',', '.')
+    return parseFloat(raw)
   }
 
   async function confirmApproval() {
     if (!approvalTarget) return
-    const raw = finalAmount.replace(/\./g, '').replace(',', '.')
-    const amount = parseFloat(raw)
+    const items = approvalTarget.purchase_request_items ?? []
+    if (items.length === 0) return
+
+    // Valida todos os valores pagos
+    const parsedPaid: Record<string, number> = {}
+    for (const it of items) {
+      const v = parseBRL(paidPrices[it.id] ?? '')
+      if (isNaN(v) || v < 0) {
+        alert(`Valor pago inválido para "${it.description}"`)
+        return
+      }
+      parsedPaid[it.id] = v
+    }
+
     setSaving(true)
-    await supabase.from('purchase_requests').update({
+
+    // 1) Atualiza unit_price de cada item (só os que mudaram)
+    const itemUpdates = items
+      .filter(it => Math.abs(parsedPaid[it.id] - it.unit_price) > 0.0001)
+      .map(it => supabase
+        .from('purchase_request_items')
+        .update({ unit_price: parsedPaid[it.id] })
+        .eq('id', it.id))
+    if (itemUpdates.length > 0) {
+      const results = await Promise.all(itemUpdates)
+      const firstErr = results.find(r => r.error)?.error
+      if (firstErr) {
+        setSaving(false)
+        alert('Erro ao atualizar valores dos itens: ' + firstErr.message)
+        return
+      }
+    }
+
+    // 2) Opcional: atualiza preço de catálogo dos produtos cujo preço mudou
+    if (updateCatalog) {
+      const productUpdates = new Map<string, number>()
+      items.forEach(it => {
+        if (!it.product_id) return
+        const paid = parsedPaid[it.id]
+        const catalog = it.products?.unit_price ?? 0
+        if (Math.abs(paid - catalog) > 0.0001) {
+          productUpdates.set(it.product_id, paid) // último valor vence se mesmo produto aparecer duas vezes
+        }
+      })
+      if (productUpdates.size > 0) {
+        const updates = Array.from(productUpdates.entries()).map(([pid, price]) =>
+          supabase.from('products').update({ unit_price: price }).eq('id', pid))
+        await Promise.all(updates) // melhor esforço; erros aqui não bloqueiam a aprovação
+      }
+    }
+
+    // 3) Soma o valor final e aprova (trigger DB baixa o estoque e avança para concluído)
+    const finalAmount = items.reduce((s, it) => s + it.quantity * parsedPaid[it.id], 0)
+    const { error: updErr } = await supabase.from('purchase_requests').update({
       status: 'aprovado',
-      final_amount: isNaN(amount) ? null : amount,
+      final_amount: finalAmount,
     }).eq('id', approvalTarget.id)
+
+    if (updErr) {
+      setSaving(false)
+      alert('Erro ao aprovar a solicitação: ' + updErr.message)
+      return
+    }
+
     setShowApproval(false)
     setApprovalTarget(null)
+    setPaidPrices({})
+    setUpdateCatalog(false)
     setSaving(false)
     loadData()
   }
@@ -838,80 +909,115 @@ export default function SolicitacoesPage() {
 
       {/* ── Approval Modal ── */}
       {showApproval && approvalTarget && (() => {
-        const estimated = requestTotal(approvalTarget)
-        const raw = finalAmount.replace(/\./g, '').replace(',', '.')
-        const final = parseFloat(raw)
-        const diff = !isNaN(final) && estimated > 0 ? final - estimated : null
         const items = approvalTarget.purchase_request_items ?? []
+        const estimatedTotal = items.reduce((s, it) => s + it.quantity * it.unit_price, 0)
+        const paidTotal = items.reduce((s, it) => {
+          const v = parseBRL(paidPrices[it.id] ?? '')
+          return s + it.quantity * (isNaN(v) ? 0 : v)
+        }, 0)
+        const diff = paidTotal - estimatedTotal
+        const changedCount = items.filter(it => {
+          const v = parseBRL(paidPrices[it.id] ?? '')
+          return !isNaN(v) && Math.abs(v - it.unit_price) > 0.0001
+        }).length
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
               <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
                 <div>
-                  <h3 className="font-semibold text-lg">Confirmar Aprovação</h3>
-                  <p className="text-xs text-gray-400 mt-0.5">Informe o valor final — o estoque será atualizado automaticamente</p>
+                  <h3 className="font-semibold text-lg">Confirmar valores da compra</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Ajuste o preço pago por item. O estoque será atualizado e o total recalculado automaticamente.
+                  </p>
                 </div>
                 <button onClick={() => setShowApproval(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
               </div>
 
               <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
-                {/* Items summary */}
                 <div className="border border-gray-200 rounded-xl overflow-hidden">
-                  <div className="bg-gray-50 px-4 py-2 flex items-center gap-2 border-b border-gray-100">
-                    <Package className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm font-semibold text-gray-700">Itens que terão estoque atualizado</span>
-                  </div>
-                  <div className="divide-y divide-gray-50 max-h-48 overflow-y-auto">
-                    {items.map(item => (
-                      <div key={item.id} className="flex items-center justify-between px-4 py-2 text-sm">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-mono text-xs text-blue-700 font-semibold flex-shrink-0">{item.products?.code ?? '—'}</span>
-                          <span className="text-gray-700 truncate">{item.description}</span>
-                        </div>
-                        <span className="font-mono text-xs text-gray-500 flex-shrink-0 ml-2">+{item.quantity} {item.unit}</span>
-                      </div>
-                    ))}
-                  </div>
-                  {estimated > 0 && (
-                    <div className="bg-gray-50 px-4 py-2 border-t border-gray-100 flex justify-between text-sm">
-                      <span className="text-gray-500">Total estimado</span>
-                      <span className="font-semibold font-mono text-gray-700">{formatBRL(estimated)}</span>
-                    </div>
-                  )}
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-100">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium text-gray-500 text-xs">Produto</th>
+                        <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs w-20">Qtd</th>
+                        <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs w-28">Estimado</th>
+                        <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs w-32">Pago (R$)</th>
+                        <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs w-28">Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {items.map(item => {
+                        const paid = parseBRL(paidPrices[item.id] ?? '')
+                        const paidValid = !isNaN(paid) && paid >= 0
+                        const subtotal = paidValid ? item.quantity * paid : 0
+                        const changed = paidValid && Math.abs(paid - item.unit_price) > 0.0001
+                        return (
+                          <tr key={item.id} className={changed ? 'bg-amber-50/40' : ''}>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="font-mono text-[11px] text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.5 rounded">{item.products?.code ?? '—'}</span>
+                                <span className="text-gray-700 truncate">{item.description}</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap">{item.quantity} {item.unit}</td>
+                            <td className="px-3 py-2 text-right font-mono text-xs text-gray-500">{formatBRL(item.unit_price)}</td>
+                            <td className="px-3 py-2">
+                              <input
+                                className={`input py-1 px-2 text-right font-mono text-sm ${changed ? 'border-amber-300 bg-amber-50' : ''} ${!paidValid ? 'border-red-300' : ''}`}
+                                value={paidPrices[item.id] ?? ''}
+                                onChange={e => setPaidPrices(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                placeholder="0,00"
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono font-semibold whitespace-nowrap">{formatBRL(subtotal)}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                    <tfoot className="bg-gray-50 border-t border-gray-100">
+                      <tr>
+                        <td colSpan={2} className="px-3 py-2 text-xs text-gray-500">
+                          {changedCount > 0 ? `${changedCount} ${changedCount === 1 ? 'item alterado' : 'itens alterados'}` : 'Nenhum item alterado'}
+                        </td>
+                        <td className="px-3 py-2 text-right text-xs text-gray-500 font-mono">{formatBRL(estimatedTotal)}</td>
+                        <td className="px-3 py-2 text-right text-xs text-gray-500">Total →</td>
+                        <td className="px-3 py-2 text-right font-mono font-bold text-green-700">{formatBRL(paidTotal)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
 
-                {/* Final amount input */}
-                <div>
-                  <label className="label">Valor Final da Compra *</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
-                    <input
-                      className="input pl-9 font-mono text-lg"
-                      placeholder="0,00"
-                      value={finalAmount}
-                      onChange={e => setFinalAmount(e.target.value)}
-                    />
-                  </div>
-                  <p className="text-xs text-gray-400 mt-1">
-                    Informe o valor real pago. Você pode inserir um valor diferente do estimado para registrar desconto ou acréscimo.
-                  </p>
-                </div>
-
-                {/* Diff indicator */}
-                {diff !== null && diff !== 0 && (
-                  <div className={`flex items-center justify-between rounded-xl px-4 py-3 text-sm border ${
+                {/* Diff entre estimado e pago */}
+                {Math.abs(diff) > 0.0001 && (
+                  <div className={`flex items-center justify-between rounded-xl px-4 py-2 text-sm border ${
                     diff < 0
                       ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
                       : 'bg-orange-50 border-orange-200 text-orange-800'
                   }`}>
-                    <span>{diff < 0 ? '🏷 Desconto aplicado' : '📈 Acréscimo'}</span>
+                    <span>{diff < 0 ? '🏷 Diferença total (desconto)' : '📈 Diferença total (acréscimo)'}</span>
                     <span className="font-bold font-mono">{diff < 0 ? '-' : '+'}{formatBRL(Math.abs(diff))}</span>
                   </div>
                 )}
+
+                {/* Atualizar catálogo */}
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={updateCatalog}
+                    onChange={e => setUpdateCatalog(e.target.checked)}
+                    className="mt-0.5 w-4 h-4"
+                  />
+                  <span className="text-sm text-gray-700">
+                    Atualizar preço de catálogo dos produtos alterados
+                    <span className="block text-xs text-gray-400 mt-0.5">
+                      Marque apenas se o reajuste for permanente (não apenas uma variação pontual deste pedido).
+                    </span>
+                  </span>
+                </label>
               </div>
 
               <div className="px-6 py-4 border-t flex gap-3 justify-end flex-shrink-0 bg-gray-50">
-                <button className="btn-secondary" onClick={() => setShowApproval(false)}>Cancelar</button>
+                <button className="btn-secondary" onClick={() => setShowApproval(false)} disabled={saving}>Cancelar</button>
                 <button
                   className="btn-primary bg-green-600 hover:bg-green-700 border-green-600"
                   onClick={confirmApproval}
