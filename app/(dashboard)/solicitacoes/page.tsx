@@ -84,6 +84,8 @@ export default function SolicitacoesPage() {
   const [approvalTarget, setApprovalTarget] = useState<PurchaseRequest | null>(null)
   // Preço pago por item (string formatada "1234,56"), indexado por id do item
   const [paidPrices, setPaidPrices] = useState<Record<string, string>>({})
+  // Desconto aplicado sobre o total (negociado com o fornecedor após o subtotal)
+  const [totalDiscount, setTotalDiscount] = useState('')
   const [updateCatalog, setUpdateCatalog] = useState(false)
 
   const loadData = useCallback(async () => {
@@ -230,6 +232,7 @@ export default function SolicitacoesPage() {
       initial[item.id] = item.unit_price.toFixed(2).replace('.', ',')
     })
     setPaidPrices(initial)
+    setTotalDiscount('')
     setUpdateCatalog(false)
     setShowApproval(true)
   }
@@ -294,7 +297,10 @@ export default function SolicitacoesPage() {
     }
 
     // 3) Soma o valor final e aprova (trigger DB baixa o estoque e avança para concluído)
-    const finalAmount = items.reduce((s, it) => s + it.quantity * parsedPaid[it.id], 0)
+    const subtotal = items.reduce((s, it) => s + it.quantity * parsedPaid[it.id], 0)
+    const discountRaw = parseBRL(totalDiscount)
+    const discount = isNaN(discountRaw) || discountRaw < 0 ? 0 : discountRaw
+    const finalAmount = Math.max(0, subtotal - discount)
     const { error: updErr } = await supabase.from('purchase_requests').update({
       status: 'aprovado',
       final_amount: finalAmount,
@@ -309,6 +315,7 @@ export default function SolicitacoesPage() {
     setShowApproval(false)
     setApprovalTarget(null)
     setPaidPrices({})
+    setTotalDiscount('')
     setUpdateCatalog(false)
     setSaving(false)
     loadData()
@@ -915,14 +922,17 @@ export default function SolicitacoesPage() {
           const v = parseBRL(paidPrices[it.id] ?? '')
           return s + it.quantity * (isNaN(v) ? 0 : v)
         }, 0)
-        const diff = paidTotal - estimatedTotal
+        const discountRaw = parseBRL(totalDiscount)
+        const discountAmt = isNaN(discountRaw) || discountRaw < 0 ? 0 : discountRaw
+        const finalTotal = Math.max(0, paidTotal - discountAmt)
+        const diff = finalTotal - estimatedTotal
         const changedCount = items.filter(it => {
           const v = parseBRL(paidPrices[it.id] ?? '')
           return !isNaN(v) && Math.abs(v - it.unit_price) > 0.0001
         }).length
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
               <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
                 <div>
                   <h3 className="font-semibold text-lg">Confirmar valores da compra</h3>
@@ -939,10 +949,10 @@ export default function SolicitacoesPage() {
                     <thead className="bg-gray-50 border-b border-gray-100">
                       <tr>
                         <th className="text-left px-3 py-2 font-medium text-gray-500 text-xs">Produto</th>
-                        <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs w-20">Qtd</th>
-                        <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs w-28">Estimado</th>
+                        <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs w-20 min-w-[70px]">Qtd</th>
+                        <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs w-28 min-w-[110px]">Estimado</th>
                         <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs w-40 min-w-[160px]">Pago (R$)</th>
-                        <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs w-28">Subtotal</th>
+                        <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs w-32 min-w-[120px]">Subtotal</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
@@ -953,10 +963,10 @@ export default function SolicitacoesPage() {
                         const changed = paidValid && Math.abs(paid - item.unit_price) > 0.0001
                         return (
                           <tr key={item.id} className={changed ? 'bg-amber-50/40' : ''}>
-                            <td className="px-3 py-2">
+                            <td className="px-3 py-2 max-w-[360px]">
                               <div className="flex items-center gap-2 min-w-0">
-                                <span className="font-mono text-[11px] text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.5 rounded">{item.products?.code ?? '—'}</span>
-                                <span className="text-gray-700 truncate">{item.description}</span>
+                                <span className="font-mono text-[11px] text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.5 rounded flex-shrink-0">{item.products?.code ?? '—'}</span>
+                                <span className="text-gray-700 truncate" title={item.description}>{item.description}</span>
                               </div>
                             </td>
                             <td className="px-3 py-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap">{item.quantity} {item.unit}</td>
@@ -980,21 +990,44 @@ export default function SolicitacoesPage() {
                           {changedCount > 0 ? `${changedCount} ${changedCount === 1 ? 'item alterado' : 'itens alterados'}` : 'Nenhum item alterado'}
                         </td>
                         <td className="px-3 py-2 text-right text-xs text-gray-500 font-mono">{formatBRL(estimatedTotal)}</td>
-                        <td className="px-3 py-2 text-right text-xs text-gray-500">Total →</td>
-                        <td className="px-3 py-2 text-right font-mono font-bold text-green-700">{formatBRL(paidTotal)}</td>
+                        <td className="px-3 py-2 text-right text-xs text-gray-500">Subtotal →</td>
+                        <td className="px-3 py-2 text-right font-mono font-semibold text-gray-700">{formatBRL(paidTotal)}</td>
                       </tr>
                     </tfoot>
                   </table>
                 </div>
 
-                {/* Diff entre estimado e pago */}
+                {/* Desconto sobre o total + total final */}
+                <div className="border border-gray-200 rounded-xl p-4 space-y-2 bg-gray-50/50">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Desconto sobre o total</label>
+                      <p className="text-xs text-gray-400">Aplicado depois dos preços por item. Use para descontos negociados sobre o pedido inteiro.</p>
+                    </div>
+                    <div className="relative w-40 flex-shrink-0">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">R$</span>
+                      <input
+                        className="input pl-9 text-right font-mono"
+                        placeholder="0,00"
+                        value={totalDiscount}
+                        onChange={e => setTotalDiscount(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-gray-200 pt-2">
+                    <span className="text-sm font-semibold text-gray-700">Total final da compra</span>
+                    <span className="text-lg font-bold font-mono text-green-700">{formatBRL(finalTotal)}</span>
+                  </div>
+                </div>
+
+                {/* Diff vs estimado */}
                 {Math.abs(diff) > 0.0001 && (
                   <div className={`flex items-center justify-between rounded-xl px-4 py-2 text-sm border ${
                     diff < 0
                       ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
                       : 'bg-orange-50 border-orange-200 text-orange-800'
                   }`}>
-                    <span>{diff < 0 ? '🏷 Diferença total (desconto)' : '📈 Diferença total (acréscimo)'}</span>
+                    <span>{diff < 0 ? '🏷 Diferença vs. estimado (desconto)' : '📈 Diferença vs. estimado (acréscimo)'}</span>
                     <span className="font-bold font-mono">{diff < 0 ? '-' : '+'}{formatBRL(Math.abs(diff))}</span>
                   </div>
                 )}
