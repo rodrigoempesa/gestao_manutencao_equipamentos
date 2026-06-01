@@ -10,16 +10,20 @@ import ListTotal from '@/components/ListTotal'
 import { Plus, X, Loader2, ClipboardList, Search, ExternalLink } from 'lucide-react'
 
 const STATUS_LABELS: Record<WorkOrderStatus, string> = {
-  aberta: 'Aberta',
-  iniciada: 'Iniciada',
-  finalizada: 'Finalizada',
+  criada: 'Criada',
+  iniciada: 'Iniciada (aguardando material)',
+  material_retirado: 'Material retirado',
+  servico_iniciado: 'Serviço iniciado',
+  servico_finalizado: 'Serviço finalizado',
   cancelada: 'Cancelada',
 }
 
 const STATUS_COLORS: Record<WorkOrderStatus, string> = {
-  aberta: 'bg-blue-100 text-blue-700',
-  iniciada: 'bg-yellow-100 text-yellow-700',
-  finalizada: 'bg-green-100 text-green-700',
+  criada: 'bg-blue-100 text-blue-700',
+  iniciada: 'bg-amber-100 text-amber-700',
+  material_retirado: 'bg-orange-100 text-orange-700',
+  servico_iniciado: 'bg-yellow-100 text-yellow-700',
+  servico_finalizado: 'bg-green-100 text-green-700',
   cancelada: 'bg-gray-100 text-gray-500',
 }
 
@@ -55,8 +59,16 @@ export default function OsClient({
   const [error, setError] = useState('')
 
   const statusCounts = useMemo(() => {
-    const c: Record<string, number> = { '': orders.length, aberta: 0, iniciada: 0, finalizada: 0, cancelada: 0 }
-    orders.forEach(o => { c[o.status]++ })
+    const c: Record<string, number> = {
+      '': orders.length,
+      criada: 0,
+      iniciada: 0,
+      material_retirado: 0,
+      servico_iniciado: 0,
+      servico_finalizado: 0,
+      cancelada: 0,
+    }
+    orders.forEach(o => { c[o.status] = (c[o.status] ?? 0) + 1 })
     return c
   }, [orders])
 
@@ -150,9 +162,11 @@ export default function OsClient({
 
   const STATUS_TABS: { key: FilterStatus; label: string }[] = [
     { key: '', label: 'Todas' },
-    { key: 'aberta', label: 'Abertas' },
-    { key: 'iniciada', label: 'Iniciadas' },
-    { key: 'finalizada', label: 'Finalizadas' },
+    { key: 'criada', label: 'Criadas' },
+    { key: 'iniciada', label: 'Aguard. material' },
+    { key: 'material_retirado', label: 'Aguard. serviço' },
+    { key: 'servico_iniciado', label: 'Serviço iniciado' },
+    { key: 'servico_finalizado', label: 'Finalizadas' },
     { key: 'cancelada', label: 'Canceladas' },
   ]
 

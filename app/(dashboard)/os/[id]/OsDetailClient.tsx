@@ -14,10 +14,21 @@ import {
 } from 'lucide-react'
 
 const STATUS_COLORS = {
-  aberta:     'bg-blue-100 text-blue-700 border-blue-200',
-  iniciada:   'bg-yellow-100 text-yellow-700 border-yellow-200',
-  finalizada: 'bg-green-100 text-green-700 border-green-200',
-  cancelada:  'bg-gray-100 text-gray-500 border-gray-200',
+  criada:             'bg-blue-100 text-blue-700 border-blue-200',
+  iniciada:           'bg-amber-100 text-amber-700 border-amber-200',
+  material_retirado:  'bg-orange-100 text-orange-700 border-orange-200',
+  servico_iniciado:   'bg-yellow-100 text-yellow-700 border-yellow-200',
+  servico_finalizado: 'bg-green-100 text-green-700 border-green-200',
+  cancelada:          'bg-gray-100 text-gray-500 border-gray-200',
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  criada:             'Criada',
+  iniciada:           'Iniciada (aguardando material)',
+  material_retirado:  'Material retirado',
+  servico_iniciado:   'Serviço iniciado',
+  servico_finalizado: 'Serviço finalizado',
+  cancelada:          'Cancelada',
 }
 
 interface Product { id: string; code: string; name: string; unit: string; unit_price: number }
@@ -38,6 +49,45 @@ function formatBRL(v: number) {
 
 function requestTotal(req: PurchaseRequest): number {
   return (req.purchase_request_items ?? []).reduce((s, it) => s + it.quantity * it.unit_price, 0)
+}
+
+function TimelineStep({
+  label, at, by, profileMap, activeBg, activeDot, pending, isDone, reading, trackingType,
+}: {
+  label: string
+  at: string | null
+  by: string | null
+  profileMap: Record<string, string>
+  activeBg: string
+  activeDot: string
+  pending: string
+  isDone: boolean
+  reading?: number | null
+  trackingType?: 'hours' | 'km'
+}) {
+  return (
+    <div className="flex items-start gap-4">
+      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${isDone ? activeBg : 'bg-gray-100'}`}>
+        <div className={`w-2.5 h-2.5 rounded-full ${isDone ? activeDot : 'bg-gray-300'}`} />
+      </div>
+      <div>
+        <p className={`font-medium text-sm ${isDone ? 'text-gray-900' : 'text-gray-400'}`}>{label}</p>
+        {isDone && at ? (
+          <>
+            <p className="text-xs text-gray-500">{formatDate(at)}</p>
+            {reading !== undefined && reading !== null && trackingType && (
+              <p className="text-xs text-gray-500">Horímetro: {formatReading(reading, trackingType)}</p>
+            )}
+            {by && profileMap[by] && (
+              <p className="text-xs text-gray-400">por {profileMap[by]}</p>
+            )}
+          </>
+        ) : (
+          <p className="text-xs text-gray-400">{pending}</p>
+        )}
+      </div>
+    </div>
+  )
 }
 
 export default function OsDetailClient({
@@ -63,7 +113,7 @@ export default function OsDetailClient({
   const trackingType = eq?.equipment_models?.tracking_type ?? 'hours'
 
   const isAdmin = role === 'admin_geral' || role === 'admin_local'
-  const canEditMaterials = isAdmin && (os.status === 'aberta' || os.status === 'iniciada')
+  const canEditMaterials = isAdmin && os.status !== 'servico_finalizado' && os.status !== 'cancelada'
 
   // Materiais (solicitação de compra) vinculados à OS
   const activeRequests = purchaseRequests.filter(r => r.status !== 'cancelado')
@@ -143,7 +193,7 @@ export default function OsDetailClient({
   const [associatingId, setAssociatingId] = useState<string | null>(null)
 
   // Modals
-  const [modal, setModal] = useState<'start' | 'finish' | 'cancel' | null>(null)
+  const [modal, setModal] = useState<'startOs' | 'pickMaterial' | 'startService' | 'finishService' | 'cancel' | null>(null)
   const [startedAt, setStartedAt] = useState(new Date().toISOString().slice(0, 16))
   const [startedReading, setStartedReading] = useState('')
   const [finishedAt, setFinishedAt] = useState(new Date().toISOString().slice(0, 16))
@@ -152,14 +202,50 @@ export default function OsDetailClient({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  async function handleStart() {
-    if (!startedReading) { setError('Informe o horímetro.'); return }
+  async function handleStartOs() {
     setSaving(true); setError('')
     const supabase = createClient()
     const { error: err } = await supabase
       .from('work_orders')
       .update({
         status: 'iniciada',
+        materials_requested_at: new Date().toISOString(),
+        materials_requested_by: currentUserId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', os.id)
+    setSaving(false)
+    if (err) { setError('Erro ao iniciar OS.'); return }
+    setModal(null)
+    router.refresh()
+  }
+
+  async function handlePickMaterial() {
+    setSaving(true); setError('')
+    const supabase = createClient()
+    const { error: err } = await supabase
+      .from('work_orders')
+      .update({
+        status: 'material_retirado',
+        materials_picked_at: new Date().toISOString(),
+        materials_picked_by: currentUserId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', os.id)
+    setSaving(false)
+    if (err) { setError('Erro ao marcar material retirado.'); return }
+    setModal(null)
+    router.refresh()
+  }
+
+  async function handleStartService() {
+    if (!startedReading) { setError('Informe o horímetro.'); return }
+    setSaving(true); setError('')
+    const supabase = createClient()
+    const { error: err } = await supabase
+      .from('work_orders')
+      .update({
+        status: 'servico_iniciado',
         started_at: new Date(startedAt).toISOString(),
         started_reading: parseFloat(startedReading),
         started_by: currentUserId,
@@ -167,7 +253,7 @@ export default function OsDetailClient({
       })
       .eq('id', os.id)
     setSaving(false)
-    if (err) { setError('Erro ao iniciar OS.'); return }
+    if (err) { setError('Erro ao iniciar serviço.'); return }
     setModal(null)
     router.refresh()
   }
@@ -227,7 +313,7 @@ export default function OsDetailClient({
     const { error: err } = await supabase
       .from('work_orders')
       .update({
-        status: 'finalizada',
+        status: 'servico_finalizado',
         finished_at: finishedDate.toISOString(),
         finished_reading: reading,
         finished_by: currentUserId,
@@ -236,7 +322,7 @@ export default function OsDetailClient({
       })
       .eq('id', os.id)
 
-    if (err) { setSaving(false); setError('Erro ao finalizar OS.'); return }
+    if (err) { setSaving(false); setError('Erro ao finalizar serviço.'); return }
 
     // Marca as solicitações vinculadas como concluídas (estado terminal,
     // sem passar por 'aprovado' — não dispara entrada de estoque).
@@ -382,7 +468,7 @@ export default function OsDetailClient({
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-bold text-gray-900 font-mono">{os.number}</h1>
               <span className={`text-xs px-2.5 py-1 rounded-full font-medium border ${STATUS_COLORS[os.status]}`}>
-                {os.status.charAt(0).toUpperCase() + os.status.slice(1)}
+                {STATUS_LABELS[os.status] ?? os.status}
               </span>
               <span className={`text-xs px-2 py-1 rounded-full font-medium ${
                 os.type === 'preventive' ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'
@@ -403,29 +489,48 @@ export default function OsDetailClient({
             <Printer className="w-4 h-4" /> Imprimir
           </Link>
 
-          {os.status === 'aberta' && (
-            <>
-              <button
-                onClick={() => { setModal('cancel'); setError('') }}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg border border-red-200 transition-colors"
-              >
-                <XCircle className="w-4 h-4" /> Cancelar OS
-              </button>
-              <button
-                onClick={() => { setModal('start'); setError(''); setStartedAt(new Date().toISOString().slice(0, 16)) }}
-                className="btn-primary flex items-center gap-2 text-sm"
-              >
-                <Play className="w-4 h-4" /> Iniciar OS
-              </button>
-            </>
+          {os.status !== 'servico_finalizado' && os.status !== 'cancelada' && (
+            <button
+              onClick={() => { setModal('cancel'); setError('') }}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg border border-red-200 transition-colors"
+            >
+              <XCircle className="w-4 h-4" /> Cancelar OS
+            </button>
+          )}
+
+          {os.status === 'criada' && (
+            <button
+              onClick={() => { setModal('startOs'); setError('') }}
+              className="btn-primary flex items-center gap-2 text-sm"
+            >
+              <Play className="w-4 h-4" /> Iniciar OS
+            </button>
           )}
 
           {os.status === 'iniciada' && (
             <button
-              onClick={() => { setModal('finish'); setError(''); setFinishedAt(new Date().toISOString().slice(0, 16)) }}
+              onClick={() => { setModal('pickMaterial'); setError('') }}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+            >
+              <Play className="w-4 h-4" /> Material retirado
+            </button>
+          )}
+
+          {os.status === 'material_retirado' && (
+            <button
+              onClick={() => { setModal('startService'); setError(''); setStartedAt(new Date().toISOString().slice(0, 16)); setStartedReading('') }}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
+            >
+              <Play className="w-4 h-4" /> Iniciar serviço
+            </button>
+          )}
+
+          {os.status === 'servico_iniciado' && (
+            <button
+              onClick={() => { setModal('finishService'); setError(''); setFinishedAt(new Date().toISOString().slice(0, 16)); setFinishedReading('') }}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
-              <CheckCircle className="w-4 h-4" /> Finalizar OS
+              <CheckCircle className="w-4 h-4" /> Finalizar serviço
             </button>
           )}
         </div>
@@ -495,73 +600,60 @@ export default function OsDetailClient({
           <Clock className="w-4 h-4 text-gray-400" /> Histórico
         </h2>
         <div className="space-y-4">
-          {/* Abertura */}
-          <div className="flex items-start gap-4">
-            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-              <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />
-            </div>
-            <div>
-              <p className="font-medium text-gray-900 text-sm">OS Aberta</p>
-              <p className="text-xs text-gray-500">{formatDate(os.opened_at)}</p>
-              {os.opened_by && profileMap[os.opened_by] && (
-                <p className="text-xs text-gray-400">por {profileMap[os.opened_by]}</p>
-              )}
-            </div>
-          </div>
-
-          {/* Início */}
-          <div className="flex items-start gap-4">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-              os.started_at ? 'bg-yellow-100' : 'bg-gray-100'
-            }`}>
-              <div className={`w-2.5 h-2.5 rounded-full ${os.started_at ? 'bg-yellow-500' : 'bg-gray-300'}`} />
-            </div>
-            <div>
-              <p className={`font-medium text-sm ${os.started_at ? 'text-gray-900' : 'text-gray-400'}`}>
-                OS Iniciada
-              </p>
-              {os.started_at ? (
-                <>
-                  <p className="text-xs text-gray-500">{formatDate(os.started_at)}</p>
-                  <p className="text-xs text-gray-500">
-                    Horímetro: {formatReading(os.started_reading, trackingType)}
-                  </p>
-                  {os.started_by && profileMap[os.started_by] && (
-                    <p className="text-xs text-gray-400">por {profileMap[os.started_by]}</p>
-                  )}
-                </>
-              ) : (
-                <p className="text-xs text-gray-400">Aguardando início</p>
-              )}
-            </div>
-          </div>
-
-          {/* Finalização */}
-          <div className="flex items-start gap-4">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-              os.finished_at ? 'bg-green-100' : 'bg-gray-100'
-            }`}>
-              <div className={`w-2.5 h-2.5 rounded-full ${os.finished_at ? 'bg-green-600' : 'bg-gray-300'}`} />
-            </div>
-            <div>
-              <p className={`font-medium text-sm ${os.finished_at ? 'text-gray-900' : 'text-gray-400'}`}>
-                OS Finalizada
-              </p>
-              {os.finished_at ? (
-                <>
-                  <p className="text-xs text-gray-500">{formatDate(os.finished_at)}</p>
-                  <p className="text-xs text-gray-500">
-                    Horímetro: {formatReading(os.finished_reading, trackingType)}
-                  </p>
-                  {os.finished_by && profileMap[os.finished_by] && (
-                    <p className="text-xs text-gray-400">por {profileMap[os.finished_by]}</p>
-                  )}
-                </>
-              ) : (
-                <p className="text-xs text-gray-400">Aguardando finalização</p>
-              )}
-            </div>
-          </div>
+          <TimelineStep
+            label="OS Criada"
+            at={os.opened_at}
+            by={os.opened_by}
+            profileMap={profileMap}
+            activeBg="bg-blue-100"
+            activeDot="bg-blue-600"
+            pending="Aguardando"
+            isDone
+          />
+          <TimelineStep
+            label="OS Iniciada (aguardando material)"
+            at={os.materials_requested_at}
+            by={os.materials_requested_by}
+            profileMap={profileMap}
+            activeBg="bg-amber-100"
+            activeDot="bg-amber-500"
+            pending="Aguardando início"
+            isDone={!!os.materials_requested_at}
+          />
+          <TimelineStep
+            label="Material retirado"
+            at={os.materials_picked_at}
+            by={os.materials_picked_by}
+            profileMap={profileMap}
+            activeBg="bg-orange-100"
+            activeDot="bg-orange-500"
+            pending="Aguardando retirada do material"
+            isDone={!!os.materials_picked_at}
+          />
+          <TimelineStep
+            label="Serviço iniciado"
+            at={os.started_at}
+            by={os.started_by}
+            profileMap={profileMap}
+            activeBg="bg-yellow-100"
+            activeDot="bg-yellow-500"
+            pending="Aguardando início do serviço"
+            isDone={!!os.started_at}
+            reading={os.started_reading}
+            trackingType={trackingType}
+          />
+          <TimelineStep
+            label="Serviço finalizado"
+            at={os.finished_at}
+            by={os.finished_by}
+            profileMap={profileMap}
+            activeBg="bg-green-100"
+            activeDot="bg-green-600"
+            pending="Aguardando finalização do serviço"
+            isDone={!!os.finished_at}
+            reading={os.finished_reading}
+            trackingType={trackingType}
+          />
         </div>
       </div>
 
@@ -672,9 +764,9 @@ export default function OsDetailClient({
           {materialItems.length > 0 && (
             <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-3">
               <span className="text-sm text-gray-500">
-                {os.status === 'finalizada'
-                  ? 'Materiais consumidos do estoque na finalização.'
-                  : 'O estoque será baixado ao finalizar a OS.'}
+                {os.status === 'servico_finalizado'
+                  ? 'Materiais consumidos do estoque ao finalizar o serviço.'
+                  : 'O estoque será baixado ao finalizar o serviço.'}
               </span>
               <span className="text-sm font-semibold text-gray-900">Total: {formatBRL(materialsTotal)}</span>
             </div>
@@ -682,22 +774,70 @@ export default function OsDetailClient({
         </div>
       )}
 
-      {/* Modal: Iniciar */}
-      {modal === 'start' && (
+      {/* Modal: Iniciar OS (criada → iniciada) — sem horímetro */}
+      {modal === 'startOs' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b">
               <h2 className="font-semibold">Iniciar OS — {os.number}</h2>
               <button onClick={() => setModal(null)}><X className="w-5 h-5 text-gray-400" /></button>
             </div>
+            <div className="px-6 py-5 space-y-3 text-sm text-gray-600">
+              <p>A OS passará para <strong>"Iniciada (aguardando material)"</strong>. Use este passo para marcar que a OS foi acionada e o material está sendo providenciado.</p>
+              {error && <p className="text-sm text-red-600">{error}</p>}
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end gap-3">
+              <button onClick={() => setModal(null)} className="btn-secondary" disabled={saving}>Cancelar</button>
+              <button onClick={handleStartOs} disabled={saving}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                Iniciar OS
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Material retirado (iniciada → material_retirado) — sem horímetro */}
+      {modal === 'pickMaterial' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h2 className="font-semibold">Material retirado — {os.number}</h2>
+              <button onClick={() => setModal(null)}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            <div className="px-6 py-5 space-y-3 text-sm text-gray-600">
+              <p>Confirma que o material já foi retirado e o equipamento está <strong>aguardando o início do serviço</strong>?</p>
+              {error && <p className="text-sm text-red-600">{error}</p>}
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end gap-3">
+              <button onClick={() => setModal(null)} className="btn-secondary" disabled={saving}>Cancelar</button>
+              <button onClick={handlePickMaterial} disabled={saving}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Iniciar serviço (material_retirado → servico_iniciado) — com horímetro */}
+      {modal === 'startService' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h2 className="font-semibold">Iniciar serviço — {os.number}</h2>
+              <button onClick={() => setModal(null)}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
             <div className="px-6 py-5 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Data e hora de início</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Data e hora de início do serviço</label>
                 <input type="datetime-local" className="input w-full" value={startedAt} onChange={e => setStartedAt(e.target.value)} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Horímetro no início ({trackingType === 'hours' ? 'h' : 'km'})
+                  Horímetro no início do serviço ({trackingType === 'hours' ? 'h' : 'km'})
                 </label>
                 <input type="number" min="0" step="0.1" className="input w-full" placeholder="Ex: 1.123"
                   value={startedReading} onChange={e => setStartedReading(e.target.value)} autoFocus />
@@ -706,27 +846,27 @@ export default function OsDetailClient({
             </div>
             <div className="px-6 py-4 border-t flex justify-end gap-3">
               <button onClick={() => setModal(null)} className="btn-secondary" disabled={saving}>Cancelar</button>
-              <button onClick={handleStart} disabled={saving}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 disabled:opacity-50">
+              <button onClick={handleStartService} disabled={saving}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                Iniciar
+                Iniciar serviço
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal: Finalizar */}
-      {modal === 'finish' && (
+      {/* Modal: Finalizar serviço (servico_iniciado → servico_finalizado) — com horímetro */}
+      {modal === 'finishService' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="font-semibold">Finalizar OS — {os.number}</h2>
+              <h2 className="font-semibold">Finalizar serviço — {os.number}</h2>
               <button onClick={() => setModal(null)}><X className="w-5 h-5 text-gray-400" /></button>
             </div>
             <div className="px-6 py-5 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Data e hora de finalização</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Data e hora de finalização do serviço</label>
                 <input type="datetime-local" className="input w-full" value={finishedAt} onChange={e => setFinishedAt(e.target.value)} />
               </div>
               <div>
@@ -750,7 +890,7 @@ export default function OsDetailClient({
               <button onClick={handleFinish} disabled={saving}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                Finalizar
+                Finalizar serviço
               </button>
             </div>
           </div>

@@ -31,7 +31,13 @@ export default async function OsDetailPage({ params }: { params: { id: string } 
   if (error || !os) notFound()
 
   // Busca perfis dos envolvidos (opened/started/finished)
-  const userIds = [os.opened_by, os.started_by, os.finished_by].filter(Boolean) as string[]
+  const userIds = [
+    os.opened_by,
+    os.materials_requested_by,
+    os.materials_picked_by,
+    os.started_by,
+    os.finished_by,
+  ].filter(Boolean) as string[]
 
   const [
     { data: profiles = [] },

@@ -143,7 +143,7 @@ export interface EquipmentStatus {
 
 export type MaintenanceStatus = 'overdue' | 'warning' | 'ok' | 'no_data' | 'os_aberta'
 
-export type WorkOrderStatus = 'aberta' | 'iniciada' | 'finalizada' | 'cancelada'
+export type WorkOrderStatus = 'criada' | 'iniciada' | 'material_retirado' | 'servico_iniciado' | 'servico_finalizado' | 'cancelada'
 export type WorkOrderType = 'preventive' | 'corrective'
 
 export interface WorkOrder {
@@ -157,6 +157,10 @@ export interface WorkOrder {
   notes: string | null
   opened_at: string
   opened_by: string | null
+  materials_requested_at: string | null
+  materials_requested_by: string | null
+  materials_picked_at: string | null
+  materials_picked_by: string | null
   started_at: string | null
   started_reading: number | null
   started_by: string | null
