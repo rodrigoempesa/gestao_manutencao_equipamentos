@@ -225,7 +225,7 @@ export default function EquipmentStatusTable({
                   </td>
                   <td className="table-cell" title={eq.next_maintenance_plan_name ? `limite: ${formatReading(eq.next_maintenance_threshold, eq.tracking_type)}` : undefined}>
                     {eq.next_maintenance_plan_name ? (
-                      <p className="text-sm font-medium truncate max-w-[160px]">{eq.next_maintenance_plan_name}</p>
+                      <p className="text-xs font-medium leading-tight line-clamp-2 max-w-[160px]">{eq.next_maintenance_plan_name}</p>
                     ) : <span className="text-gray-400">-</span>}
                   </td>
                   <td className="table-cell whitespace-nowrap">
