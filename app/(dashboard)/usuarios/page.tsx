@@ -28,9 +28,10 @@ type PermMatrix = Record<string, Record<string, boolean>> // role → slug → e
 type ProfileModules = Record<string, Record<string, boolean>> // profile_id → slug → enabled
 
 const ROLES = [
-  { value: 'admin_geral', label: 'Admin Geral',  color: 'badge-red'  },
-  { value: 'admin_local', label: 'Admin Local',  color: 'badge-blue' },
-  { value: 'encarregado', label: 'Operador',     color: 'badge-gray' },
+  { value: 'admin_geral',  label: 'Admin Geral',  color: 'badge-red'    },
+  { value: 'admin_local',  label: 'Admin Local',  color: 'badge-blue'   },
+  { value: 'encarregado',  label: 'Operador',     color: 'badge-gray'   },
+  { value: 'visualizador', label: 'Visualizador', color: 'badge-yellow' },
 ]
 
 function roleBadge(role: string) {

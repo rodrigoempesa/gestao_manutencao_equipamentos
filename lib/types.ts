@@ -1,4 +1,4 @@
-export type Role = 'admin_geral' | 'admin_local' | 'encarregado'
+export type Role = 'admin_geral' | 'admin_local' | 'encarregado' | 'visualizador'
 export type TrackingType = 'hours' | 'km'
 
 export interface Branch {

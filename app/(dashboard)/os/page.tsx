@@ -74,6 +74,7 @@ export default async function OsPage() {
       plansByModel={plansByModel}
       currentUserId={user.id}
       isAdminGeral={profile.role === 'admin_geral'}
+      role={profile.role}
     />
   )
 }

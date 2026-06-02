@@ -113,6 +113,7 @@ export default function OsDetailClient({
   const trackingType = eq?.equipment_models?.tracking_type ?? 'hours'
 
   const isAdmin = role === 'admin_geral' || role === 'admin_local'
+  const canOperate = isAdmin || role === 'encarregado'
   const canEditMaterials = isAdmin && os.status !== 'servico_finalizado' && os.status !== 'cancelada'
 
   // Materiais (solicitação de compra) vinculados à OS
@@ -489,7 +490,7 @@ export default function OsDetailClient({
             <Printer className="w-4 h-4" /> Imprimir
           </Link>
 
-          {os.status !== 'servico_finalizado' && os.status !== 'cancelada' && (
+          {canOperate && os.status !== 'servico_finalizado' && os.status !== 'cancelada' && (
             <button
               onClick={() => { setModal('cancel'); setError('') }}
               className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg border border-red-200 transition-colors"
@@ -498,7 +499,7 @@ export default function OsDetailClient({
             </button>
           )}
 
-          {os.status === 'criada' && (
+          {canOperate && os.status === 'criada' && (
             <button
               onClick={() => { setModal('startOs'); setError('') }}
               className="btn-primary flex items-center gap-2 text-sm"
@@ -507,7 +508,7 @@ export default function OsDetailClient({
             </button>
           )}
 
-          {os.status === 'iniciada' && (
+          {canOperate && os.status === 'iniciada' && (
             <button
               onClick={() => { setModal('pickMaterial'); setError('') }}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
@@ -516,7 +517,7 @@ export default function OsDetailClient({
             </button>
           )}
 
-          {os.status === 'material_retirado' && (
+          {canOperate && os.status === 'material_retirado' && (
             <button
               onClick={() => { setModal('startService'); setError(''); setStartedAt(new Date().toISOString().slice(0, 16)); setStartedReading('') }}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
@@ -525,7 +526,7 @@ export default function OsDetailClient({
             </button>
           )}
 
-          {os.status === 'servico_iniciado' && (
+          {canOperate && os.status === 'servico_iniciado' && (
             <button
               onClick={() => { setModal('finishService'); setError(''); setFinishedAt(new Date().toISOString().slice(0, 16)); setFinishedReading('') }}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"

@@ -23,12 +23,15 @@ const STATUS_TABS: { key: StatusFilter; label: string; color: string; activeColo
 export default function EquipmentStatusTable({
   list,
   isAdminGeral,
+  role,
   initialStatus = '',
 }: {
   list: EquipmentStatus[]
   isAdminGeral: boolean
+  role: string
   initialStatus?: StatusFilter
 }) {
+  const canWrite = role === 'admin_geral' || role === 'admin_local' || role === 'encarregado'
   const [search, setSearch] = useState('')
   const [filterBranch, setFilterBranch] = useState('')
   const [filterStatus, setFilterStatus] = useState<StatusFilter>(initialStatus)
@@ -246,7 +249,7 @@ export default function EquipmentStatusTable({
                           title={`Próx. revisão: faltam ${formatReading(upcoming.remaining, eq.tracking_type)} para ${upcoming.planName} (limite: ${formatReading(upcoming.threshold, eq.tracking_type)})`}
                         />
                       )}
-                      {(status === 'overdue' || status === 'warning') && eq.next_maintenance_plan_id && (
+                      {canWrite && (status === 'overdue' || status === 'warning') && eq.next_maintenance_plan_id && (
                         <Link
                           href={`/os?equipment=${eq.id}&plan=${eq.next_maintenance_plan_id}`}
                           className="text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium whitespace-nowrap"

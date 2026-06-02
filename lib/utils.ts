@@ -34,8 +34,14 @@ export function roleLabel(role: string): string {
     admin_geral: 'Admin Geral',
     admin_local: 'Admin Local',
     encarregado: 'Encarregado',
+    visualizador: 'Visualizador',
   }
   return map[role] ?? role
+}
+
+// Papéis com permissão de escrita no sistema (excluindo visualizador)
+export function canWrite(role: string | null | undefined): boolean {
+  return role === 'admin_geral' || role === 'admin_local' || role === 'encarregado'
 }
 
 export function trackingLabel(type: string): string {

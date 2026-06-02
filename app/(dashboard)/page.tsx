@@ -111,7 +111,7 @@ export default async function DashboardPage() {
       {alertItems.length > 0 && <AlertsSection items={alertItems} />}
 
       {/* Equipment Status Table with status filter tabs */}
-      <EquipmentStatusTable list={list} isAdminGeral={profile.role === 'admin_geral'} />
+      <EquipmentStatusTable list={list} isAdminGeral={profile.role === 'admin_geral'} role={profile.role} />
     </div>
   )
 }

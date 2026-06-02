@@ -35,13 +35,16 @@ export default function OsClient({
   plansByModel,
   currentUserId,
   isAdminGeral,
+  role,
 }: {
   orders: WorkOrder[]
   equipmentList: any[]
   plansByModel: Record<string, { id: string; name: string; interval_value: number }[]>
   currentUserId: string
   isAdminGeral: boolean
+  role: string
 }) {
+  const canWrite = role === 'admin_geral' || role === 'admin_local' || role === 'encarregado'
   const router = useRouter()
   const searchParams = useSearchParams()
   const didAutoOpen = useRef(false)
@@ -105,6 +108,7 @@ export default function OsClient({
   // Auto-abre o modal de criação quando vem com ?equipment=&plan= (dashboard)
   useEffect(() => {
     if (didAutoOpen.current) return
+    if (!canWrite) return
     const equipParam = searchParams.get('equipment')
     const planParam = searchParams.get('plan')
     if (!equipParam || equipmentList.length === 0) return
@@ -177,9 +181,11 @@ export default function OsClient({
           <h1 className="page-title">Ordens de Serviço</h1>
           <p className="text-gray-500 text-sm mt-1">Gerencie as OS de manutenção preventiva e corretiva</p>
         </div>
-        <button onClick={openModal} className="btn-primary flex items-center gap-2">
-          <Plus className="w-4 h-4" /> Nova OS
-        </button>
+        {canWrite && (
+          <button onClick={openModal} className="btn-primary flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Nova OS
+          </button>
+        )}
       </div>
 
       {/* Filtros */}
