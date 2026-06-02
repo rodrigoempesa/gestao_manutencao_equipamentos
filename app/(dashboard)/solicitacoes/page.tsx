@@ -89,6 +89,24 @@ export default function SolicitacoesPage() {
   const [totalDiscount, setTotalDiscount] = useState('')
   const [updateCatalog, setUpdateCatalog] = useState(false)
 
+  // Editar itens de solicitação pendente
+  interface EditItem {
+    _key: string
+    id?: string          // id do purchase_request_items (undefined = novo)
+    product_id: string   // pode ser editado só nos novos
+    quantity: string
+    // snapshot para exibição quando id existir
+    existingProductName?: string
+    existingProductCode?: string
+    existingUnit?: string
+    existingUnitPrice?: number
+  }
+  const [showEditItems, setShowEditItems] = useState(false)
+  const [editItemsTarget, setEditItemsTarget] = useState<PurchaseRequest | null>(null)
+  const [editItems, setEditItems] = useState<EditItem[]>([])
+  const [editItemsSaving, setEditItemsSaving] = useState(false)
+  const [editItemsError, setEditItemsError] = useState('')
+
   const loadData = useCallback(async () => {
     setLoading(true)
     const [{ data: reqs }, { data: equips }, { data: allPlans }, { data: allPlanItems }, { data: prods }] = await Promise.all([
@@ -255,6 +273,124 @@ export default function SolicitacoesPage() {
     setTotalDiscount(inferredDiscount > 0.0001 ? inferredDiscount.toFixed(2).replace('.', ',') : '')
     setUpdateCatalog(false)
     setShowApproval(true)
+  }
+
+  function openEditItems(req: PurchaseRequest) {
+    setEditItemsTarget(req)
+    setEditItems(
+      (req.purchase_request_items ?? []).map(it => ({
+        _key: Math.random().toString(36).slice(2),
+        id: it.id,
+        product_id: it.product_id ?? '',
+        quantity: String(it.quantity),
+        existingProductName: it.products?.name ?? it.description,
+        existingProductCode: it.products?.code,
+        existingUnit: it.unit,
+        existingUnitPrice: it.unit_price,
+      })),
+    )
+    setEditItemsError('')
+    setShowEditItems(true)
+  }
+
+  function addEditItemRow() {
+    setEditItems(prev => [
+      ...prev,
+      { _key: Math.random().toString(36).slice(2), product_id: '', quantity: '1' },
+    ])
+  }
+
+  function removeEditItemRow(key: string) {
+    setEditItems(prev => prev.filter(i => i._key !== key))
+  }
+
+  function updateEditItemRow(key: string, patch: Partial<EditItem>) {
+    setEditItems(prev => prev.map(i => i._key === key ? { ...i, ...patch } : i))
+  }
+
+  async function confirmEditItems() {
+    if (!editItemsTarget) return
+    const original = editItemsTarget.purchase_request_items ?? []
+    const currentIds = new Set(editItems.filter(i => i.id).map(i => i.id as string))
+    const toDelete = original.filter(o => !currentIds.has(o.id))
+
+    // Valida novos itens
+    const toInsertRaw = editItems.filter(i => !i.id)
+    for (const i of toInsertRaw) {
+      if (!i.product_id) { setEditItemsError('Selecione o produto em todas as linhas novas.'); return }
+      const q = parseFloat(i.quantity)
+      if (isNaN(q) || q <= 0) { setEditItemsError('Informe uma quantidade válida em todas as linhas.'); return }
+    }
+    // Valida quantidades dos existentes
+    for (const i of editItems.filter(x => x.id)) {
+      const q = parseFloat(i.quantity)
+      if (isNaN(q) || q <= 0) { setEditItemsError('Quantidade inválida em algum item existente.'); return }
+    }
+    if (editItems.length === 0) { setEditItemsError('A solicitação precisa ter pelo menos um item.'); return }
+
+    setEditItemsSaving(true); setEditItemsError('')
+
+    // 1) Deleta os removidos
+    if (toDelete.length > 0) {
+      const { error: delErr } = await supabase
+        .from('purchase_request_items')
+        .delete()
+        .in('id', toDelete.map(o => o.id))
+      if (delErr) {
+        setEditItemsSaving(false)
+        setEditItemsError('Erro ao remover itens: ' + delErr.message)
+        return
+      }
+    }
+
+    // 2) Atualiza quantidades dos existentes (só se mudou)
+    const existingChanges = editItems.filter(i => {
+      if (!i.id) return false
+      const orig = original.find(o => o.id === i.id)
+      if (!orig) return false
+      return Math.abs(parseFloat(i.quantity) - orig.quantity) > 0.0001
+    })
+    if (existingChanges.length > 0) {
+      const updates = existingChanges.map(i =>
+        supabase.from('purchase_request_items')
+          .update({ quantity: parseFloat(i.quantity) })
+          .eq('id', i.id as string))
+      const results = await Promise.all(updates)
+      const firstErr = results.find(r => r.error)?.error
+      if (firstErr) {
+        setEditItemsSaving(false)
+        setEditItemsError('Erro ao atualizar quantidades: ' + firstErr.message)
+        return
+      }
+    }
+
+    // 3) Insere novos itens (snapshot de preço/unidade vem do catálogo)
+    if (toInsertRaw.length > 0) {
+      const inserts = toInsertRaw.map(i => {
+        const prod = products.find(p => p.id === i.product_id)!
+        return {
+          request_id: editItemsTarget.id,
+          product_id: i.product_id,
+          plan_item_id: null,
+          description: prod.name,
+          quantity: parseFloat(i.quantity),
+          unit: prod.unit,
+          unit_price: prod.unit_price,
+        }
+      })
+      const { error: insErr } = await supabase.from('purchase_request_items').insert(inserts)
+      if (insErr) {
+        setEditItemsSaving(false)
+        setEditItemsError('Erro ao adicionar novos itens: ' + insErr.message)
+        return
+      }
+    }
+
+    setEditItemsSaving(false)
+    setShowEditItems(false)
+    setEditItemsTarget(null)
+    setEditItems([])
+    loadData()
   }
 
   function parseBRL(s: string): number {
@@ -492,6 +628,15 @@ export default function SolicitacoesPage() {
                       <option value="aprovado">Aprovar (atualiza estoque)</option>
                       <option value="cancelado">Cancelar</option>
                     </select>
+                  )}
+                  {req.status === 'pendente' && (
+                    <button
+                      className="btn-secondary py-1 px-2"
+                      title="Editar itens"
+                      onClick={() => openEditItems(req)}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
                   )}
                   {req.status === 'concluido' && (
                     <button
@@ -1100,6 +1245,102 @@ export default function SolicitacoesPage() {
                   {saving
                     ? (approvalMode === 'edit' ? 'Salvando...' : 'Aprovando...')
                     : (approvalMode === 'edit' ? 'Salvar Alterações' : 'Confirmar Aprovação')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ── Edit Items Modal (solicitação pendente) ── */}
+      {showEditItems && editItemsTarget && (() => {
+        const subtotal = editItems.reduce((s, i) => {
+          const q = parseFloat(i.quantity)
+          const price = i.id ? (i.existingUnitPrice ?? 0) : (products.find(p => p.id === i.product_id)?.unit_price ?? 0)
+          return s + (isNaN(q) ? 0 : q) * price
+        }, 0)
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+              <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
+                <div>
+                  <h3 className="font-semibold text-lg">Editar itens da solicitação</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Adicione ou remova itens. Aplica-se apenas a solicitações pendentes (sem efeito no estoque).
+                  </p>
+                </div>
+                <button onClick={() => setShowEditItems(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+              </div>
+
+              <div className="overflow-y-auto flex-1 px-6 py-4 space-y-2">
+                {editItems.length === 0 && (
+                  <p className="text-sm text-gray-400 text-center py-6">Nenhum item. Clique em "Adicionar item" abaixo.</p>
+                )}
+                {editItems.map((it, idx) => {
+                  const isExisting = !!it.id
+                  return (
+                    <div key={it._key} className="flex items-end gap-2 border border-gray-200 rounded-xl px-3 py-2 bg-white">
+                      <div className="flex-1 min-w-0">
+                        {idx === 0 && <label className="text-xs text-gray-500 block mb-1">Produto</label>}
+                        {isExisting ? (
+                          <div className="flex items-center gap-2 min-w-0 py-1">
+                            <span className="font-mono text-[11px] text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.5 rounded flex-shrink-0">{it.existingProductCode ?? '—'}</span>
+                            <span className="text-sm text-gray-700 truncate" title={it.existingProductName}>{it.existingProductName}</span>
+                          </div>
+                        ) : (
+                          <select
+                            className="input"
+                            value={it.product_id}
+                            onChange={e => updateEditItemRow(it._key, { product_id: e.target.value })}
+                          >
+                            <option value="">Selecione...</option>
+                            {products.map(p => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
+                          </select>
+                        )}
+                      </div>
+                      <div className="w-24 flex-shrink-0">
+                        {idx === 0 && <label className="text-xs text-gray-500 block mb-1">Qtd</label>}
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.001"
+                          className="input text-right font-mono"
+                          value={it.quantity}
+                          onChange={e => updateEditItemRow(it._key, { quantity: e.target.value })}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeEditItemRow(it._key)}
+                        className="p-2 text-gray-400 hover:text-red-600 mb-0.5 flex-shrink-0"
+                        title="Remover item"
+                      >
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )
+                })}
+                <button
+                  type="button"
+                  onClick={addEditItemRow}
+                  disabled={products.length === 0}
+                  className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1 disabled:text-gray-400"
+                >
+                  <Plus className="w-4 h-4" /> Adicionar item
+                </button>
+                {editItemsError && (
+                  <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{editItemsError}</p>
+                )}
+              </div>
+
+              <div className="px-6 py-3 border-t bg-gray-50 flex items-center justify-between">
+                <span className="text-sm text-gray-600">Subtotal estimado:</span>
+                <span className="text-sm font-bold font-mono text-gray-900">{formatBRL(subtotal)}</span>
+              </div>
+              <div className="px-6 py-4 border-t flex gap-3 justify-end flex-shrink-0 bg-gray-50">
+                <button className="btn-secondary" onClick={() => setShowEditItems(false)} disabled={editItemsSaving}>Cancelar</button>
+                <button className="btn-primary" onClick={confirmEditItems} disabled={editItemsSaving}>
+                  {editItemsSaving ? 'Salvando...' : 'Salvar Alterações'}
                 </button>
               </div>
             </div>
