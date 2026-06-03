@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Profile } from '@/lib/types'
-import { cn } from '@/lib/utils'
+import { cn, roleLabel } from '@/lib/utils'
 import {
   LayoutDashboard,
   Gauge,
@@ -60,11 +60,8 @@ export default function Sidebar({ profile, allowedModules }: SidebarProps) {
 
   const visibleItems = NAV_ITEMS.filter(item => allowedModules.includes(item.module))
 
-  const roleLabel = (role: string) => {
-    if (role === 'admin_geral') return 'Admin Geral'
-    if (role === 'admin_local') return 'Admin Local'
-    return 'Operador'
-  }
+  // (roleLabel agora vem de @/lib/utils — cobre admin_geral, admin_local,
+  // encarregado e visualizador uniformemente em todo o app)
 
   async function handleLogout() {
     await supabase.auth.signOut()

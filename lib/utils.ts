@@ -33,7 +33,7 @@ export function roleLabel(role: string): string {
   const map: Record<string, string> = {
     admin_geral: 'Admin Geral',
     admin_local: 'Admin Local',
-    encarregado: 'Encarregado',
+    encarregado: 'Operador',
     visualizador: 'Visualizador',
   }
   return map[role] ?? role
