@@ -7,6 +7,8 @@ import { trackingLabel } from '@/lib/utils'
 import { BookOpen, Plus, Pencil, Trash2, X, ChevronDown, ChevronRight, Package, Hammer, ShoppingCart, Search, ListChecks } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import ListTotal from '@/components/ListTotal'
+import { canWrite } from '@/lib/utils'
+import { useUserRole } from '@/lib/hooks'
 
 interface Product { id: string; code: string; name: string; unit: string; unit_price: number }
 interface Service { id: string; name: string; unit: string; unit_price: number }
@@ -25,6 +27,8 @@ function formatBRL(v: number) {
 
 export default function PlanosPage() {
   const supabase = createClient()
+  const role = useUserRole()
+  const allowWrite = canWrite(role)
   const router = useRouter()
   const [brands, setBrands] = useState<Brand[]>([])
   const [models, setModels] = useState<EquipmentModel[]>([])
@@ -281,16 +285,22 @@ export default function PlanosPage() {
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="section-title">Marcas</h2>
-          <button className="btn-primary" onClick={() => { setBrandForm({ id: '', name: '' }); setError(''); setShowBrandModal(true) }}>
-            <Plus className="w-4 h-4" /> Nova Marca
-          </button>
+          {allowWrite && (
+            <button className="btn-primary" onClick={() => { setBrandForm({ id: '', name: '' }); setError(''); setShowBrandModal(true) }}>
+              <Plus className="w-4 h-4" /> Nova Marca
+            </button>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {brands.map(b => (
             <div key={b.id} className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-1.5">
               <span className="text-sm font-medium">{b.name}</span>
-              <button className="text-gray-400 hover:text-blue-600" onClick={() => { setBrandForm({ id: b.id, name: b.name }); setError(''); setShowBrandModal(true) }}><Pencil className="w-3 h-3" /></button>
-              <button className="text-gray-400 hover:text-red-600" onClick={() => deleteBrand(b.id)}><Trash2 className="w-3 h-3" /></button>
+              {allowWrite && (
+                <>
+                  <button className="text-gray-400 hover:text-blue-600" onClick={() => { setBrandForm({ id: b.id, name: b.name }); setError(''); setShowBrandModal(true) }}><Pencil className="w-3 h-3" /></button>
+                  <button className="text-gray-400 hover:text-red-600" onClick={() => deleteBrand(b.id)}><Trash2 className="w-3 h-3" /></button>
+                </>
+              )}
             </div>
           ))}
           {brands.length === 0 && <p className="text-gray-400 text-sm">Nenhuma marca cadastrada</p>}
@@ -301,9 +311,11 @@ export default function PlanosPage() {
       <div className="card p-0 overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="section-title">Modelos e Planos</h2>
-          <button className="btn-primary" onClick={() => { setModelForm({ id: '', brand_id: '', name: '', tracking_type: 'hours', cycle_duration: '' }); setError(''); setShowModelModal(true) }}>
-            <Plus className="w-4 h-4" /> Novo Modelo
-          </button>
+          {allowWrite && (
+            <button className="btn-primary" onClick={() => { setModelForm({ id: '', brand_id: '', name: '', tracking_type: 'hours', cycle_duration: '' }); setError(''); setShowModelModal(true) }}>
+              <Plus className="w-4 h-4" /> Novo Modelo
+            </button>
+          )}
         </div>
 
         {models.length === 0 && <p className="text-gray-400 text-sm text-center py-12">Nenhum modelo cadastrado</p>}
@@ -329,13 +341,15 @@ export default function PlanosPage() {
                     <p className="text-xs text-gray-400">{modelPlans.length} plano(s)</p>
                   </div>
                 </div>
-                <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                  <button className="btn-secondary py-1 px-2" onClick={() => { setModelForm({ id: model.id, brand_id: model.brand_id, name: model.name, tracking_type: model.tracking_type, cycle_duration: model.cycle_duration ? String(model.cycle_duration) : '' }); setError(''); setShowModelModal(true) }}><Pencil className="w-4 h-4" /></button>
-                  <button className="btn-secondary py-1 px-2 text-red-500" onClick={() => deleteModel(model.id)}><Trash2 className="w-4 h-4" /></button>
-                  <button className="btn-primary py-1 px-2" onClick={() => { setPlanForm({ id: '', model_id: model.id, interval_value: '', name: '', description: '' }); setError(''); setShowPlanModal(true) }}>
-                    <Plus className="w-4 h-4" /> Plano
-                  </button>
-                </div>
+                {allowWrite && (
+                  <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                    <button className="btn-secondary py-1 px-2" onClick={() => { setModelForm({ id: model.id, brand_id: model.brand_id, name: model.name, tracking_type: model.tracking_type, cycle_duration: model.cycle_duration ? String(model.cycle_duration) : '' }); setError(''); setShowModelModal(true) }}><Pencil className="w-4 h-4" /></button>
+                    <button className="btn-secondary py-1 px-2 text-red-500" onClick={() => deleteModel(model.id)}><Trash2 className="w-4 h-4" /></button>
+                    <button className="btn-primary py-1 px-2" onClick={() => { setPlanForm({ id: '', model_id: model.id, interval_value: '', name: '', description: '' }); setError(''); setShowPlanModal(true) }}>
+                      <Plus className="w-4 h-4" /> Plano
+                    </button>
+                  </div>
+                )}
               </div>
 
               {isExpanded && (
@@ -360,18 +374,24 @@ export default function PlanosPage() {
                             </div>
                           </div>
                           <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                            <button className="btn-secondary py-1 px-2" onClick={() => { setPlanForm({ id: plan.id, model_id: plan.model_id, interval_value: String(plan.interval_value), name: plan.name, description: plan.description ?? '' }); setError(''); setShowPlanModal(true) }}><Pencil className="w-3 h-3" /></button>
-                            <button className="btn-secondary py-1 px-2 text-red-500" onClick={() => deletePlan(plan.id)}><Trash2 className="w-3 h-3" /></button>
+                            {allowWrite && (
+                              <>
+                                <button className="btn-secondary py-1 px-2" onClick={() => { setPlanForm({ id: plan.id, model_id: plan.model_id, interval_value: String(plan.interval_value), name: plan.name, description: plan.description ?? '' }); setError(''); setShowPlanModal(true) }}><Pencil className="w-3 h-3" /></button>
+                                <button className="btn-secondary py-1 px-2 text-red-500" onClick={() => deletePlan(plan.id)}><Trash2 className="w-3 h-3" /></button>
+                              </>
+                            )}
                             <button className="btn-secondary py-1 px-2 text-blue-600" onClick={() => openItemsModal(plan)}>
                               <ListChecks className="w-3 h-3" /> Itens
                             </button>
-                            <button
-                              className="btn-secondary py-1 px-2 text-green-600"
-                              title="Solicitar compra dos materiais deste plano"
-                              onClick={() => router.push(`/solicitacoes?plan=${plan.id}`)}
-                            >
-                              <ShoppingCart className="w-3 h-3" />
-                            </button>
+                            {allowWrite && (
+                              <button
+                                className="btn-secondary py-1 px-2 text-green-600"
+                                title="Solicitar compra dos materiais deste plano"
+                                onClick={() => router.push(`/solicitacoes?plan=${plan.id}`)}
+                              >
+                                <ShoppingCart className="w-3 h-3" />
+                              </button>
+                            )}
                           </div>
                         </div>
 
@@ -699,7 +719,7 @@ export default function PlanosPage() {
               {error && <p className="text-sm text-red-600">{error}</p>}
               <div className="flex gap-3 justify-end">
                 <button type="button" className="btn-secondary" onClick={() => setShowItemModal(false)}>Cancelar</button>
-                <button type="submit" className="btn-primary" disabled={saving}>{saving ? '...' : 'Salvar Item'}</button>
+                {allowWrite && <button type="submit" className="btn-primary" disabled={saving}>{saving ? '...' : 'Salvar Item'}</button>}
               </div>
             </div>
             </form>
@@ -849,7 +869,7 @@ export default function PlanosPage() {
               {error && <p className="text-sm text-red-600">{error}</p>}
               <div className="flex gap-3">
                 <button type="button" className="btn-secondary" onClick={() => setShowItemsModal(false)}>Cancelar</button>
-                <button className="btn-primary" onClick={saveItemsBatch} disabled={saving}>{saving ? 'Salvando...' : 'Salvar Itens'}</button>
+                {allowWrite && <button className="btn-primary" onClick={saveItemsBatch} disabled={saving}>{saving ? 'Salvando...' : 'Salvar Itens'}</button>}
               </div>
             </div>
           </div>

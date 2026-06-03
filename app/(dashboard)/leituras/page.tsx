@@ -414,6 +414,7 @@ export default function LeiturasPage() {
 
   const batchEquip = allEquipment.find(e => e.id === batchEquipId)
   const isAdmin = profile?.role === 'admin_geral'
+  const canWrite = profile?.role === 'admin_geral' || profile?.role === 'admin_local' || profile?.role === 'encarregado'
 
   if (loading) {
     return (
@@ -533,35 +534,39 @@ export default function LeiturasPage() {
               </div>
 
               <div className="flex items-center gap-2 flex-shrink-0">
-                <div>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min={0}
-                    className="input w-36 font-mono text-right"
-                    placeholder="Ex: 1250.5"
-                    value={row.inputValue}
-                    onChange={e => updateRow(row.equipment.id, { inputValue: e.target.value, saved: false, error: '' })}
-                    onKeyDown={e => { if (e.key === 'Enter') saveReading(row) }}
-                  />
-                </div>
-                <input
-                  type="text"
-                  className="input w-40 hidden sm:block"
-                  placeholder="Observação (opcional)"
-                  value={row.notes}
-                  onChange={e => updateRow(row.equipment.id, { notes: e.target.value })}
-                />
-                <button
-                  className="btn-primary flex-shrink-0"
-                  onClick={() => saveReading(row)}
-                  disabled={saving === row.equipment.id || !row.inputValue}
-                >
-                  {saving === row.equipment.id
-                    ? '...'
-                    : <><Save className="w-4 h-4" /><span className="hidden sm:inline">Salvar</span></>
-                  }
-                </button>
+                {canWrite && (
+                  <>
+                    <div>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min={0}
+                        className="input w-36 font-mono text-right"
+                        placeholder="Ex: 1250.5"
+                        value={row.inputValue}
+                        onChange={e => updateRow(row.equipment.id, { inputValue: e.target.value, saved: false, error: '' })}
+                        onKeyDown={e => { if (e.key === 'Enter') saveReading(row) }}
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      className="input w-40 hidden sm:block"
+                      placeholder="Observação (opcional)"
+                      value={row.notes}
+                      onChange={e => updateRow(row.equipment.id, { notes: e.target.value })}
+                    />
+                    <button
+                      className="btn-primary flex-shrink-0"
+                      onClick={() => saveReading(row)}
+                      disabled={saving === row.equipment.id || !row.inputValue}
+                    >
+                      {saving === row.equipment.id
+                        ? '...'
+                        : <><Save className="w-4 h-4" /><span className="hidden sm:inline">Salvar</span></>
+                      }
+                    </button>
+                  </>
+                )}
                 <button
                   className="btn-secondary flex-shrink-0"
                   title="Histórico"
@@ -571,13 +576,15 @@ export default function LeiturasPage() {
                 </button>
               </div>
             </div>
-            <input
-              type="text"
-              className="input mt-2 sm:hidden"
-              placeholder="Observação (opcional)"
-              value={row.notes}
-              onChange={e => updateRow(row.equipment.id, { notes: e.target.value })}
-            />
+            {canWrite && (
+              <input
+                type="text"
+                className="input mt-2 sm:hidden"
+                placeholder="Observação (opcional)"
+                value={row.notes}
+                onChange={e => updateRow(row.equipment.id, { notes: e.target.value })}
+              />
+            )}
           </div>
         ))}
       </div>

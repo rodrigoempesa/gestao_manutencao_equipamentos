@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Hammer, Plus, Pencil, ToggleLeft, ToggleRight, X } from 'lucide-react'
 import ListTotal from '@/components/ListTotal'
+import { canWrite } from '@/lib/utils'
+import { useUserRole } from '@/lib/hooks'
 
 interface Service {
   id: string
@@ -33,6 +35,8 @@ function formatBRL(value: number) {
 
 export default function ServicosPage() {
   const supabase = createClient()
+  const role = useUserRole()
+  const allowWrite = canWrite(role)
   const [services, setServices] = useState<Service[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -84,9 +88,11 @@ export default function ServicosPage() {
           </h1>
           <p className="text-gray-500 text-sm mt-1">Mão de obra, terceiros e serviços externos</p>
         </div>
-        <button className="btn-primary" onClick={() => { setForm(emptyForm()); setError(''); setShowForm(true) }}>
-          <Plus className="w-4 h-4" /> Novo Serviço
-        </button>
+        {allowWrite && (
+          <button className="btn-primary" onClick={() => { setForm(emptyForm()); setError(''); setShowForm(true) }}>
+            <Plus className="w-4 h-4" /> Novo Serviço
+          </button>
+        )}
       </div>
 
       <div className="card p-0 overflow-hidden">
@@ -114,14 +120,16 @@ export default function ServicosPage() {
                   <td className="table-cell text-right font-mono font-semibold">{formatBRL(s.unit_price)}</td>
                   <td className="table-cell">{s.active ? <span className="badge-green">Ativo</span> : <span className="badge-gray">Inativo</span>}</td>
                   <td className="table-cell">
-                    <div className="flex gap-2">
-                      <button className="btn-secondary py-1 px-2" onClick={() => { setForm({ id: s.id, name: s.name, description: s.description ?? '', unit: s.unit, unit_price: String(s.unit_price), active: s.active }); setError(''); setShowForm(true) }}>
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button className={`btn-secondary py-1 px-2 ${s.active ? 'text-red-500' : 'text-green-600'}`} onClick={() => toggleActive(s)}>
-                        {s.active ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-                      </button>
-                    </div>
+                    {allowWrite ? (
+                      <div className="flex gap-2">
+                        <button className="btn-secondary py-1 px-2" onClick={() => { setForm({ id: s.id, name: s.name, description: s.description ?? '', unit: s.unit, unit_price: String(s.unit_price), active: s.active }); setError(''); setShowForm(true) }}>
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button className={`btn-secondary py-1 px-2 ${s.active ? 'text-red-500' : 'text-green-600'}`} onClick={() => toggleActive(s)}>
+                          {s.active ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    ) : <span className="text-gray-300">—</span>}
                   </td>
                 </tr>
               ))}

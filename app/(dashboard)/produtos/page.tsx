@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback, useMemo, Fragment } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Package, Plus, Pencil, ToggleLeft, ToggleRight, X, AlertTriangle, ChevronLeft, ChevronRight, ChevronDown, History } from 'lucide-react'
 import ListTotal from '@/components/ListTotal'
-import { formatDate } from '@/lib/utils'
+import { canWrite, formatDate } from '@/lib/utils'
+import { useUserRole } from '@/lib/hooks'
 
 interface PriceHistoryEntry {
   id: string
@@ -55,6 +56,8 @@ function formatBRL(value: number) {
 
 export default function ProdutosPage() {
   const supabase = createClient()
+  const role = useUserRole()
+  const allowWrite = canWrite(role)
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -177,9 +180,11 @@ export default function ProdutosPage() {
         </div>
         <div className="flex gap-3">
           <input type="text" className="input w-48" placeholder="Buscar..." value={filter} onChange={e => { setFilter(e.target.value); setPage(1) }} />
-          <button className="btn-primary" onClick={() => { setForm(emptyForm()); setError(''); setShowForm(true) }}>
-            <Plus className="w-4 h-4" /> Novo Produto
-          </button>
+          {allowWrite && (
+            <button className="btn-primary" onClick={() => { setForm(emptyForm()); setError(''); setShowForm(true) }}>
+              <Plus className="w-4 h-4" /> Novo Produto
+            </button>
+          )}
         </div>
       </div>
 
@@ -246,17 +251,19 @@ export default function ProdutosPage() {
                       <td className="table-cell text-right font-mono font-semibold">{formatBRL(p.current_stock * p.unit_price)}</td>
                       <td className="table-cell">{p.active ? <span className="badge-green">Ativo</span> : <span className="badge-gray">Inativo</span>}</td>
                       <td className="table-cell">
-                        <div className="flex gap-1.5">
-                          <button className="btn-secondary py-1 px-2 text-xs" onClick={() => { setShowStockModal(p); setStockAdjust(''); setStockType('add') }} title="Ajustar estoque">
-                            <Package className="w-3.5 h-3.5" />
-                          </button>
-                          <button className="btn-secondary py-1 px-2" onClick={() => { setForm({ id: p.id, code: p.code, name: p.name, unit: p.unit, current_stock: String(p.current_stock), min_stock: String(p.min_stock), unit_price: String(p.unit_price), category: p.category ?? '', notes: p.notes ?? '', active: p.active }); setError(''); setShowForm(true) }}>
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <button className={`btn-secondary py-1 px-2 ${p.active ? 'text-red-500' : 'text-green-600'}`} onClick={() => toggleActive(p)}>
-                            {p.active ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-                          </button>
-                        </div>
+                        {allowWrite ? (
+                          <div className="flex gap-1.5">
+                            <button className="btn-secondary py-1 px-2 text-xs" onClick={() => { setShowStockModal(p); setStockAdjust(''); setStockType('add') }} title="Ajustar estoque">
+                              <Package className="w-3.5 h-3.5" />
+                            </button>
+                            <button className="btn-secondary py-1 px-2" onClick={() => { setForm({ id: p.id, code: p.code, name: p.name, unit: p.unit, current_stock: String(p.current_stock), min_stock: String(p.min_stock), unit_price: String(p.unit_price), category: p.category ?? '', notes: p.notes ?? '', active: p.active }); setError(''); setShowForm(true) }}>
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button className={`btn-secondary py-1 px-2 ${p.active ? 'text-red-500' : 'text-green-600'}`} onClick={() => toggleActive(p)}>
+                              {p.active ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        ) : <span className="text-gray-300">—</span>}
                       </td>
                     </tr>
                     {isExpanded && (

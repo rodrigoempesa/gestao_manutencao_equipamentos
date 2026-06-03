@@ -11,6 +11,8 @@ import {
   Package, CheckCircle, XCircle, Clock, Truck, Paperclip,
   FileText, Eye, Upload, Loader2, Pencil,
 } from 'lucide-react'
+import { canWrite } from '@/lib/utils'
+import { useUserRole } from '@/lib/hooks'
 
 interface Product { id: string; code: string; name: string; unit: string; unit_price: number }
 interface PlanItem {
@@ -45,6 +47,8 @@ function formatBRL(v: number) {
 
 export default function SolicitacoesPage() {
   const supabase = createClient()
+  const role = useUserRole()
+  const allowWrite = canWrite(role)
   const searchParams = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadTargetId, setUploadTargetId] = useState<string | null>(null)
@@ -562,9 +566,11 @@ export default function SolicitacoesPage() {
           </h1>
           <p className="text-gray-500 text-sm mt-1">Pedidos de material por plano de manutenção</p>
         </div>
-        <button className="btn-primary" onClick={() => { setShowCreate(true); setError('') }}>
-          <Plus className="w-4 h-4" /> Nova Solicitação
-        </button>
+        {allowWrite && (
+          <button className="btn-primary" onClick={() => { setShowCreate(true); setError('') }}>
+            <Plus className="w-4 h-4" /> Nova Solicitação
+          </button>
+        )}
       </div>
 
       {/* List */}
@@ -618,7 +624,7 @@ export default function SolicitacoesPage() {
                   </span>
                   {req.status === 'concluido' ? (
                     <span className="text-xs text-gray-400 italic px-2">Estoque atualizado</span>
-                  ) : req.status === 'cancelado' ? null : (
+                  ) : req.status === 'cancelado' ? null : allowWrite ? (
                     <select
                       className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-600"
                       value={req.status}
@@ -628,8 +634,8 @@ export default function SolicitacoesPage() {
                       <option value="aprovado">Aprovar (atualiza estoque)</option>
                       <option value="cancelado">Cancelar</option>
                     </select>
-                  )}
-                  {req.status === 'pendente' && (
+                  ) : null}
+                  {allowWrite && req.status === 'pendente' && (
                     <button
                       className="btn-secondary py-1 px-2"
                       title="Editar itens"
@@ -638,7 +644,7 @@ export default function SolicitacoesPage() {
                       <Pencil className="w-4 h-4" />
                     </button>
                   )}
-                  {req.status === 'concluido' && (
+                  {allowWrite && req.status === 'concluido' && (
                     <button
                       className="btn-secondary py-1 px-2"
                       title="Editar valor pago"
@@ -761,17 +767,19 @@ export default function SolicitacoesPage() {
                                 <Loader2 className="w-4 h-4 animate-spin" />
                               </button>
                             )}
-                            <button
-                              className="btn-secondary py-1 px-2"
-                              title="Substituir arquivo"
-                              onClick={() => triggerUpload(req.id)}
-                              disabled={isUploading}
-                            >
-                              {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                            </button>
+                            {allowWrite && (
+                              <button
+                                className="btn-secondary py-1 px-2"
+                                title="Substituir arquivo"
+                                onClick={() => triggerUpload(req.id)}
+                                disabled={isUploading}
+                              >
+                                {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                              </button>
+                            )}
                           </div>
                         </div>
-                      ) : (
+                      ) : allowWrite ? (
                         <button
                           className="flex items-center gap-2 border-2 border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50 rounded-xl px-4 py-3 text-sm text-gray-500 hover:text-blue-600 transition-colors w-full"
                           onClick={() => triggerUpload(req.id)}
@@ -782,6 +790,8 @@ export default function SolicitacoesPage() {
                             : <><Paperclip className="w-4 h-4" /> Anexar nota fiscal (PDF, JPEG ou PNG — máx. 10 MB)</>
                           }
                         </button>
+                      ) : (
+                        <p className="text-xs text-gray-400 italic px-2">Nenhuma nota fiscal anexada</p>
                       )}
                     </div>
                   )}
