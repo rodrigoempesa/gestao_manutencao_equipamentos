@@ -10,7 +10,7 @@ import { formatDate } from '@/lib/utils'
 import {
   ArrowLeft, Printer, CheckCircle, Play, XCircle,
   Loader2, X, Clock, Wrench, MapPin, Tag,
-  ShoppingCart, Package, Plus, Trash2,
+  ShoppingCart, Package, Plus, Trash2, ChevronDown, ChevronRight,
 } from 'lucide-react'
 
 const STATUS_COLORS = {
@@ -147,6 +147,7 @@ export default function OsDetailClient({
   const [materialSaving, setMaterialSaving] = useState(false)
   const [materialError, setMaterialError] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [collapsedReqs, setCollapsedReqs] = useState<Record<string, boolean>>({})
 
   // Itens do plano com produto vinculado (usados pelo botão "Gerar do plano")
   interface PlanProductItem {
@@ -729,11 +730,20 @@ export default function OsDetailClient({
                 const items = req.purchase_request_items ?? []
                 const reqSubtotal = items.reduce((s, it) => s + it.quantity * it.unit_price, 0)
                 const reqBadge = REQ_STATUS_BADGE[req.status] ?? REQ_STATUS_BADGE.pendente
+                const collapsed = !!collapsedReqs[req.id]
                 return (
                   <div key={req.id} className="px-6 py-4 space-y-2">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1 space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => setCollapsedReqs(prev => ({ ...prev, [req.id]: !prev[req.id] }))}
+                        className="min-w-0 flex-1 space-y-1 text-left hover:opacity-80 transition-opacity"
+                        title={collapsed ? 'Expandir itens' : 'Recolher itens'}
+                      >
                         <div className="flex items-center gap-2 flex-wrap">
+                          {collapsed
+                            ? <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                            : <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />}
                           <span className={`${reqBadge.cls} text-xs`}>{reqBadge.label}</span>
                           <span className="text-xs text-gray-500">{formatDate(req.created_at)}</span>
                           {req.final_amount != null ? (
@@ -741,11 +751,12 @@ export default function OsDetailClient({
                           ) : (
                             <span className="text-xs text-gray-400">~ {formatBRL(reqSubtotal)} (estimado)</span>
                           )}
+                          <span className="text-xs text-gray-400">· {items.length} {items.length === 1 ? 'item' : 'itens'}</span>
                         </div>
                         {req.notes && (
-                          <p className="text-sm text-gray-700 font-medium">{req.notes}</p>
+                          <p className="text-sm text-gray-700 font-medium pl-6">{req.notes}</p>
                         )}
-                      </div>
+                      </button>
                       {canEditMaterials && (
                         <button
                           onClick={() => handleDeleteRequest(req.id)}
@@ -757,35 +768,37 @@ export default function OsDetailClient({
                         </button>
                       )}
                     </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-xs text-gray-400">
-                            <th className="text-left font-medium py-1">Produto</th>
-                            <th className="text-right font-medium py-1 w-24">Qtd</th>
-                            <th className="text-right font-medium py-1 w-28">Vlr Unit.</th>
-                            <th className="text-right font-medium py-1 w-28">Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {items.map(it => (
-                            <tr key={it.id} className="border-t border-gray-50">
-                              <td className="py-1.5 text-gray-700">
-                                <span className="flex items-center gap-2">
-                                  <Package className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
-                                  {it.products?.name ?? it.description}
-                                </span>
-                              </td>
-                              <td className="py-1.5 text-right font-mono whitespace-nowrap">
-                                {it.quantity.toLocaleString('pt-BR')} {it.unit}
-                              </td>
-                              <td className="py-1.5 text-right font-mono text-gray-500">{formatBRL(it.unit_price)}</td>
-                              <td className="py-1.5 text-right font-mono font-semibold">{formatBRL(it.quantity * it.unit_price)}</td>
+                    {!collapsed && (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="text-xs text-gray-400">
+                              <th className="text-left font-medium py-1">Produto</th>
+                              <th className="text-right font-medium py-1 w-24">Qtd</th>
+                              <th className="text-right font-medium py-1 w-28">Vlr Unit.</th>
+                              <th className="text-right font-medium py-1 w-28">Total</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {items.map(it => (
+                              <tr key={it.id} className="border-t border-gray-50">
+                                <td className="py-1.5 text-gray-700">
+                                  <span className="flex items-center gap-2">
+                                    <Package className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+                                    {it.products?.name ?? it.description}
+                                  </span>
+                                </td>
+                                <td className="py-1.5 text-right font-mono whitespace-nowrap">
+                                  {it.quantity.toLocaleString('pt-BR')} {it.unit}
+                                </td>
+                                <td className="py-1.5 text-right font-mono text-gray-500">{formatBRL(it.unit_price)}</td>
+                                <td className="py-1.5 text-right font-mono font-semibold">{formatBRL(it.quantity * it.unit_price)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 )
               })}
