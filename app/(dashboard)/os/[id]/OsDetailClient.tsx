@@ -38,6 +38,7 @@ interface RequestItem {
 }
 interface PurchaseRequest {
   id: string; status: string; notes: string | null; created_at: string
+  final_amount?: number | null
   plan_id?: string | null
   maintenance_plans?: { id: string; name: string; interval_value: number } | null
   purchase_request_items?: RequestItem[]
@@ -119,7 +120,23 @@ export default function OsDetailClient({
   // Materiais (solicitação de compra) vinculados à OS
   const activeRequests = purchaseRequests.filter(r => r.status !== 'cancelado')
   const materialItems = activeRequests.flatMap(r => r.purchase_request_items ?? [])
-  const materialsTotal = materialItems.reduce((s, it) => s + it.quantity * it.unit_price, 0)
+  // Soma "bruta": qty × preço unitário, sem considerar desconto sobre o total
+  const materialsSubtotal = materialItems.reduce((s, it) => s + it.quantity * it.unit_price, 0)
+  // Soma "real paga": usa final_amount quando disponível (solicitação concluída,
+  // refletindo descontos), senão cai no subtotal de itens daquela solicitação
+  const materialsPaid = activeRequests.reduce((s, r) => {
+    if (r.final_amount != null) return s + r.final_amount
+    const subtotal = (r.purchase_request_items ?? []).reduce((ss, it) => ss + it.quantity * it.unit_price, 0)
+    return s + subtotal
+  }, 0)
+  const hasDiscount = Math.abs(materialsPaid - materialsSubtotal) > 0.0001
+
+  const REQ_STATUS_BADGE: Record<string, { label: string; cls: string }> = {
+    pendente:  { label: 'Pendente',  cls: 'badge-yellow' },
+    aprovado:  { label: 'Aprovado',  cls: 'badge-blue' },
+    concluido: { label: 'Concluído', cls: 'badge-green' },
+    cancelado: { label: 'Cancelado', cls: 'badge-gray' },
+  }
 
   // Modal de materiais
   interface DraftItem { _key: string; product_id: string; quantity: string }
@@ -710,17 +727,30 @@ export default function OsDetailClient({
             <div className="divide-y divide-gray-100">
               {activeRequests.map(req => {
                 const items = req.purchase_request_items ?? []
+                const reqSubtotal = items.reduce((s, it) => s + it.quantity * it.unit_price, 0)
+                const reqBadge = REQ_STATUS_BADGE[req.status] ?? REQ_STATUS_BADGE.pendente
                 return (
                   <div key={req.id} className="px-6 py-4 space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-xs text-gray-400">
-                        Solicitação de {formatDate(req.created_at)}{req.notes ? ` · ${req.notes}` : ''}
-                      </p>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`${reqBadge.cls} text-xs`}>{reqBadge.label}</span>
+                          <span className="text-xs text-gray-500">{formatDate(req.created_at)}</span>
+                          {req.final_amount != null ? (
+                            <span className="text-xs font-semibold text-green-700">{formatBRL(req.final_amount)}</span>
+                          ) : (
+                            <span className="text-xs text-gray-400">~ {formatBRL(reqSubtotal)} (estimado)</span>
+                          )}
+                        </div>
+                        {req.notes && (
+                          <p className="text-sm text-gray-700 font-medium">{req.notes}</p>
+                        )}
+                      </div>
                       {canEditMaterials && (
                         <button
                           onClick={() => handleDeleteRequest(req.id)}
                           disabled={deletingId === req.id}
-                          className="text-gray-400 hover:text-red-600 disabled:opacity-50"
+                          className="text-gray-400 hover:text-red-600 disabled:opacity-50 flex-shrink-0"
                           title="Remover desta OS"
                         >
                           {deletingId === req.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
@@ -763,13 +793,24 @@ export default function OsDetailClient({
           )}
 
           {materialItems.length > 0 && (
-            <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-3">
-              <span className="text-sm text-gray-500">
+            <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 space-y-2">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-gray-500">Subtotal dos itens</span>
+                <span className="font-mono text-gray-700">{formatBRL(materialsSubtotal)}</span>
+              </div>
+              {hasDiscount && (
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="text-gray-500">Total efetivamente pago{' '}
+                    <span className="text-xs text-gray-400">(soma das solicitações, com descontos)</span>
+                  </span>
+                  <span className="font-mono font-bold text-green-700">{formatBRL(materialsPaid)}</span>
+                </div>
+              )}
+              <p className="text-xs text-gray-400 pt-1 border-t border-gray-200">
                 {os.status === 'servico_finalizado'
                   ? 'Materiais consumidos do estoque ao finalizar o serviço.'
                   : 'O estoque será baixado ao finalizar o serviço.'}
-              </span>
-              <span className="text-sm font-semibold text-gray-900">Total: {formatBRL(materialsTotal)}</span>
+              </p>
             </div>
           )}
         </div>
