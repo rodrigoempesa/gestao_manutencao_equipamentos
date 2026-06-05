@@ -147,7 +147,7 @@ export default function OsDetailClient({
   const [materialSaving, setMaterialSaving] = useState(false)
   const [materialError, setMaterialError] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [collapsedReqs, setCollapsedReqs] = useState<Record<string, boolean>>({})
+  const [expandedReqs, setExpandedReqs] = useState<Record<string, boolean>>({})
 
   // Itens do plano com produto vinculado (usados pelo botão "Gerar do plano")
   interface PlanProductItem {
@@ -730,13 +730,13 @@ export default function OsDetailClient({
                 const items = req.purchase_request_items ?? []
                 const reqSubtotal = items.reduce((s, it) => s + it.quantity * it.unit_price, 0)
                 const reqBadge = REQ_STATUS_BADGE[req.status] ?? REQ_STATUS_BADGE.pendente
-                const collapsed = !!collapsedReqs[req.id]
+                const collapsed = !expandedReqs[req.id]
                 return (
                   <div key={req.id} className="px-6 py-4 space-y-2">
                     <div className="flex items-start justify-between gap-3">
                       <button
                         type="button"
-                        onClick={() => setCollapsedReqs(prev => ({ ...prev, [req.id]: !prev[req.id] }))}
+                        onClick={() => setExpandedReqs(prev => ({ ...prev, [req.id]: !prev[req.id] }))}
                         className="min-w-0 flex-1 space-y-1 text-left hover:opacity-80 transition-opacity"
                         title={collapsed ? 'Expandir itens' : 'Recolher itens'}
                       >
