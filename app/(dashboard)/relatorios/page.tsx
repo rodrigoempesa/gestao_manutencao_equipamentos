@@ -21,7 +21,7 @@ export default async function RelatoriosPage() {
   // Equipment with last reading date (from vw_equipment_status) — all statuses
   let statusQuery = supabase
     .from('vw_equipment_status')
-    .select('id, code, name, active, branch_id, branch_name, branch_city, branch_state, last_reading_date')
+    .select('id, code, name, active, branch_id, branch_name, branch_city, branch_state, tracking_type, current_reading, last_reading_date, last_maintenance_date, last_maintenance_reading, last_maintenance_plan_name, next_maintenance_plan_name, next_maintenance_threshold, next_maintenance_interval')
     .order('code')
 
   if (!isAdminGeral && profile.branch_id) {

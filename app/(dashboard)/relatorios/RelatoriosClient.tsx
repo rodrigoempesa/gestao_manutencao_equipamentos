@@ -3,10 +3,11 @@
 import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { formatDate } from '@/lib/utils'
-import { Download, Clock, Database, AlertTriangle, Pencil, X, Check, Loader2, EyeOff } from 'lucide-react'
+import { formatReading } from '@/lib/types'
+import { Download, Clock, Database, AlertTriangle, Pencil, X, Check, Loader2, EyeOff, Wrench } from 'lucide-react'
 
 type DaysFilter = 7 | 15 | 30
-type Tab = 'leituras' | 'horimetro' | 'planos'
+type Tab = 'status' | 'leituras' | 'horimetro' | 'planos'
 
 function downloadCsv(filename: string, headers: string[], rows: (string | null | undefined)[][]) {
   const lines = [headers, ...rows].map(r =>
@@ -41,7 +42,7 @@ export default function RelatoriosClient({
   noPlansModels: any[]
   isAdminGeral: boolean
 }) {
-  const [tab, setTab] = useState<Tab>('leituras')
+  const [tab, setTab] = useState<Tab>('status')
   const [daysFilter, setDaysFilter] = useState<DaysFilter>(7)
   const [showInactive, setShowInactive] = useState(false)
 
@@ -122,7 +123,14 @@ export default function RelatoriosClient({
       return a.code.localeCompare(b.code, 'pt-BR')
     })
 
+  const statusReport = useMemo(() => {
+    return statusList
+      .filter(eq => showInactive || eq.active)
+      .sort((a, b) => (a.code ?? '').localeCompare(b.code ?? '', 'pt-BR'))
+  }, [statusList, showInactive])
+
   const tabs = [
+    { key: 'status' as Tab, label: 'Status de Manutenção', icon: Wrench, count: statusReport.length },
     { key: 'leituras' as Tab, label: 'Leituras Atrasadas', icon: Clock, count: null },
     { key: 'horimetro' as Tab, label: 'Sem Horímetro Inicial', icon: Database, count: visiblePending.length },
     ...(isAdminGeral
@@ -172,6 +180,95 @@ export default function RelatoriosClient({
           {showInactive ? 'Mostrando inativos' : 'Incluir inativos'}
         </button>
       </div>
+
+      {/* Status de Manutenção */}
+      {tab === 'status' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <p className="text-sm text-gray-500">
+              Visão consolidada por equipamento com horímetro atual, última revisão realizada e próxima manutenção prevista.
+            </p>
+            <button
+              className="btn-secondary"
+              onClick={() => downloadCsv(
+                'status-manutencao.csv',
+                ['Código', 'Equipamento', 'Filial', 'Horímetro atual', 'Última revisão', 'Data última revisão', 'Próxima manutenção', 'Limite próxima'],
+                statusReport.map(eq => [
+                  eq.code,
+                  eq.name,
+                  eq.branch_name ?? '',
+                  eq.current_reading != null ? formatReading(eq.current_reading, eq.tracking_type) : '',
+                  eq.last_maintenance_plan_name ?? '',
+                  eq.last_maintenance_date ? formatDate(eq.last_maintenance_date) : '',
+                  eq.next_maintenance_plan_name ?? '',
+                  eq.next_maintenance_threshold != null ? formatReading(eq.next_maintenance_threshold, eq.tracking_type) : '',
+                ]),
+              )}
+              disabled={statusReport.length === 0}
+            >
+              <Download className="w-4 h-4" /> Exportar CSV
+            </button>
+          </div>
+
+          <div className="card p-0 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="table-header">Equipamento</th>
+                    <th className="table-header">Filial</th>
+                    <th className="table-header text-right">Horímetro atual</th>
+                    <th className="table-header">Última revisão</th>
+                    <th className="table-header">Próxima manutenção</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {statusReport.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="table-cell text-center text-gray-400 py-12">
+                        Nenhum equipamento{showInactive ? '' : ' ativo'} cadastrado.
+                      </td>
+                    </tr>
+                  )}
+                  {statusReport.map(eq => (
+                    <tr key={eq.id} className={`hover:bg-gray-50 ${!eq.active ? 'opacity-60' : ''}`}>
+                      <td className="table-cell">
+                        <p className="font-mono font-bold text-gray-900">{eq.code}</p>
+                        <p className="text-xs text-gray-500 truncate max-w-[200px]">{eq.name}</p>
+                      </td>
+                      <td className="table-cell text-gray-600 whitespace-nowrap">{eq.branch_name ?? '-'}</td>
+                      <td className="table-cell text-right font-mono font-semibold whitespace-nowrap">
+                        {eq.current_reading != null ? (
+                          <>
+                            <p>{formatReading(eq.current_reading, eq.tracking_type)}</p>
+                            <p className="text-xs text-gray-400 font-sans font-normal">{formatDate(eq.last_reading_date)}</p>
+                          </>
+                        ) : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="table-cell">
+                        {eq.last_maintenance_plan_name ? (
+                          <>
+                            <p className="text-xs font-medium leading-tight line-clamp-2 max-w-[160px]">{eq.last_maintenance_plan_name}</p>
+                            <p className="text-xs text-gray-400">{formatDate(eq.last_maintenance_date)}</p>
+                          </>
+                        ) : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="table-cell">
+                        {eq.next_maintenance_plan_name ? (
+                          <>
+                            <p className="text-xs font-medium leading-tight line-clamp-2 max-w-[160px]">{eq.next_maintenance_plan_name}</p>
+                            <p className="text-xs text-gray-400 font-mono">limite: {formatReading(eq.next_maintenance_threshold, eq.tracking_type)}</p>
+                          </>
+                        ) : <span className="text-gray-300">—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Leituras Atrasadas */}
       {tab === 'leituras' && (
