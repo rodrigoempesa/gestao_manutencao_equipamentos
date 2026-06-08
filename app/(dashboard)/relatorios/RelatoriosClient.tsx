@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { formatDate } from '@/lib/utils'
 import { formatReading } from '@/lib/types'
-import { Download, Clock, Database, AlertTriangle, Pencil, X, Check, Loader2, EyeOff, Wrench } from 'lucide-react'
+import { Download, Clock, Database, AlertTriangle, Pencil, X, Check, Loader2, EyeOff, Wrench, Printer } from 'lucide-react'
 
 type DaysFilter = 7 | 15 | 30
 type Tab = 'status' | 'leituras' | 'horimetro' | 'planos'
@@ -188,26 +188,36 @@ export default function RelatoriosClient({
             <p className="text-sm text-gray-500">
               Visão consolidada por equipamento com horímetro atual, última revisão realizada e próxima manutenção prevista.
             </p>
-            <button
-              className="btn-secondary"
-              onClick={() => downloadCsv(
-                'status-manutencao.csv',
-                ['Código', 'Equipamento', 'Filial', 'Horímetro atual', 'Última revisão', 'Data última revisão', 'Próxima manutenção', 'Limite próxima'],
-                statusReport.map(eq => [
-                  eq.code,
-                  eq.name,
-                  eq.branch_name ?? '',
-                  eq.current_reading != null ? formatReading(eq.current_reading, eq.tracking_type) : '',
-                  eq.last_maintenance_plan_name ?? '',
-                  eq.last_maintenance_date ? formatDate(eq.last_maintenance_date) : '',
-                  eq.next_maintenance_plan_name ?? '',
-                  eq.next_maintenance_threshold != null ? formatReading(eq.next_maintenance_threshold, eq.tracking_type) : '',
-                ]),
-              )}
-              disabled={statusReport.length === 0}
-            >
-              <Download className="w-4 h-4" /> Exportar CSV
-            </button>
+            <div className="flex gap-2">
+              <a
+                href={`/relatorios/status-manutencao/print${showInactive ? '?incluirInativos=1' : ''}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-secondary"
+              >
+                <Printer className="w-4 h-4" /> Imprimir / Salvar PDF
+              </a>
+              <button
+                className="btn-secondary"
+                onClick={() => downloadCsv(
+                  'status-manutencao.csv',
+                  ['Código', 'Equipamento', 'Filial', 'Horímetro atual', 'Última revisão', 'Data última revisão', 'Próxima manutenção', 'Limite próxima'],
+                  statusReport.map(eq => [
+                    eq.code,
+                    eq.name,
+                    eq.branch_name ?? '',
+                    eq.current_reading != null ? formatReading(eq.current_reading, eq.tracking_type) : '',
+                    eq.last_maintenance_plan_name ?? '',
+                    eq.last_maintenance_date ? formatDate(eq.last_maintenance_date) : '',
+                    eq.next_maintenance_plan_name ?? '',
+                    eq.next_maintenance_threshold != null ? formatReading(eq.next_maintenance_threshold, eq.tracking_type) : '',
+                  ]),
+                )}
+                disabled={statusReport.length === 0}
+              >
+                <Download className="w-4 h-4" /> Exportar CSV
+              </button>
+            </div>
           </div>
 
           <div className="card p-0 overflow-hidden">
