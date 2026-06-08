@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Equipment, Reading } from '@/lib/types'
 import { formatReading } from '@/lib/types'
 import { todayISO, trackingLabel, formatDate } from '@/lib/utils'
-import { Gauge, Save, Check, AlertTriangle, History, ListPlus, Plus, Trash2, X, CheckCircle2, Upload, Download, MapPin } from 'lucide-react'
+import { Gauge, Save, Check, AlertTriangle, History, ListPlus, Plus, Trash2, X, CheckCircle2, Upload, Download, MapPin, Search } from 'lucide-react'
 
 interface EquipmentRow {
   equipment: Equipment
@@ -47,6 +47,8 @@ export default function LeiturasPage() {
   const [allEquipment, setAllEquipment] = useState<Equipment[]>([])
   const [tab, setTab] = useState<'ativos' | 'inativos'>('ativos')
   const [inactiveRows, setInactiveRows] = useState<{ equipment: Equipment; lastReading: Reading | null }[]>([])
+  const [searchLeit, setSearchLeit] = useState('')
+  const [filterBranchLeit, setFilterBranchLeit] = useState('')
 
   // Batch modal state
   const [showBatch, setShowBatch] = useState(false)
@@ -416,6 +418,28 @@ export default function LeiturasPage() {
   const isAdmin = profile?.role === 'admin_geral'
   const canWrite = profile?.role === 'admin_geral' || profile?.role === 'admin_local' || profile?.role === 'encarregado'
 
+  const branchOptionsLeit = (() => {
+    const map = new Map<string, string>()
+    rows.forEach(r => {
+      const b: any = r.equipment.branches
+      if (r.equipment.branch_id && b?.name) map.set(r.equipment.branch_id, b.name)
+    })
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'))
+  })()
+
+  const filteredRows = rows.filter(r => {
+    if (filterBranchLeit && r.equipment.branch_id !== filterBranchLeit) return false
+    if (searchLeit) {
+      const q = searchLeit.toLowerCase()
+      const code = (r.equipment.code ?? '').toLowerCase()
+      const name = (r.equipment.name ?? '').toLowerCase()
+      if (!code.includes(q) && !name.includes(q)) return false
+    }
+    return true
+  })
+
+  const hasLeitFilters = !!searchLeit || !!filterBranchLeit
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -484,14 +508,57 @@ export default function LeiturasPage() {
 
       {tab === 'ativos' && (
         <>
+      {rows.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-48">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              className="input pl-9 py-1.5 text-sm"
+              placeholder="Buscar por código ou nome..."
+              value={searchLeit}
+              onChange={e => setSearchLeit(e.target.value)}
+            />
+          </div>
+          {isAdmin && (
+            <select
+              className="input py-1.5 text-sm w-56"
+              value={filterBranchLeit}
+              onChange={e => setFilterBranchLeit(e.target.value)}
+            >
+              <option value="">Todas as filiais</option>
+              {branchOptionsLeit.map(([id, name]) => (
+                <option key={id} value={id}>{name}</option>
+              ))}
+            </select>
+          )}
+          {hasLeitFilters && (
+            <button
+              className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 flex-shrink-0"
+              onClick={() => { setSearchLeit(''); setFilterBranchLeit('') }}
+            >
+              <X className="w-3 h-3" /> Limpar filtros
+            </button>
+          )}
+          <span className="text-xs text-gray-500 ml-auto">
+            {filteredRows.length} de {rows.length} {rows.length === 1 ? 'equipamento' : 'equipamentos'}
+          </span>
+        </div>
+      )}
+
       {rows.length === 0 && (
         <div className="card text-center text-gray-400 py-16">
           Nenhum equipamento encontrado para sua filial.
         </div>
       )}
+      {rows.length > 0 && filteredRows.length === 0 && (
+        <div className="card text-center text-gray-400 py-12">
+          Nenhum equipamento corresponde aos filtros aplicados.
+        </div>
+      )}
 
       <div className="space-y-3">
-        {rows.map(row => (
+        {filteredRows.map(row => (
           <div
             key={row.equipment.id}
             className={`card p-4 border-l-4 ${
