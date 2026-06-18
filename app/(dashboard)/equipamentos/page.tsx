@@ -85,6 +85,14 @@ export default function EquipamentosPage() {
   const [inactiveReading, setInactiveReading] = useState('')
   const [inactiveDate, setInactiveDate] = useState('')
 
+  // Reactivation modal
+  const [showReactivateModal, setShowReactivateModal] = useState(false)
+  const [reactivateTarget, setReactivateTarget] = useState<Equipment | null>(null)
+  const [reactivateDate, setReactivateDate] = useState('')
+  const [reactivateReading, setReactivateReading] = useState('')
+  const [reactivateSaving, setReactivateSaving] = useState(false)
+  const [reactivateError, setReactivateError] = useState('')
+
   // Transfer modal
   const [showTransferModal, setShowTransferModal] = useState(false)
   const [transferTarget, setTransferTarget] = useState<Equipment | null>(null)
@@ -227,26 +235,89 @@ export default function EquipamentosPage() {
       setInactiveDate(new Date().toISOString().slice(0, 10))
       setShowInactiveModal(true)
     } else {
-      // Reactivating — clear inactivation fields
-      supabase.from('equipment').update({ active: true, inactive_reason: null, inactive_at: null, inactive_reading: null }).eq('id', eq.id).then(() => loadData())
+      // Reactivating — abre modal pedindo a data e horímetro do retorno
+      setReactivateTarget(eq)
+      setReactivateDate(new Date().toISOString().slice(0, 10))
+      setReactivateReading('')
+      setReactivateError('')
+      setShowReactivateModal(true)
     }
   }
 
   async function confirmDeactivate() {
     if (!inactiveTarget || !inactiveReason) return
-    await supabase.from('equipment')
+    const { data: { user } } = await supabase.auth.getUser()
+    const inactivatedAt = inactiveDate ? new Date(inactiveDate).toISOString() : new Date().toISOString()
+    const inactivatedReadingNum = inactiveReading ? parseFloat(inactiveReading) : null
+
+    // 1) Atualiza o estado atual do equipamento
+    const { error: eqErr } = await supabase.from('equipment')
       .update({
         active: false,
         inactive_reason: inactiveReason,
-        inactive_at: inactiveDate ? new Date(inactiveDate).toISOString() : new Date().toISOString(),
-        inactive_reading: inactiveReading ? parseFloat(inactiveReading) : null,
+        inactive_at: inactivatedAt,
+        inactive_reading: inactivatedReadingNum,
       })
       .eq('id', inactiveTarget.id)
+    if (eqErr) { alert('Erro ao desativar equipamento: ' + eqErr.message); return }
+
+    // 2) Abre um novo período no histórico de inatividade
+    await supabase.from('equipment_inactivity_periods').insert({
+      equipment_id: inactiveTarget.id,
+      inactivated_at: inactivatedAt,
+      inactivated_reading: inactivatedReadingNum,
+      inactivated_reason: inactiveReason,
+      inactivated_by: user?.id ?? null,
+    })
+
     setShowInactiveModal(false)
     setInactiveTarget(null)
     setInactiveReason(null)
     setInactiveReading('')
     setInactiveDate('')
+    loadData()
+  }
+
+  async function confirmReactivate() {
+    if (!reactivateTarget) return
+    if (!reactivateDate) { setReactivateError('Informe a data do retorno.'); return }
+
+    setReactivateSaving(true); setReactivateError('')
+    const { data: { user } } = await supabase.auth.getUser()
+    const reactivatedAt = new Date(reactivateDate).toISOString()
+    const reactivatedReadingNum = reactivateReading ? parseFloat(reactivateReading) : null
+
+    // 1) Fecha o período aberto no histórico (se existir)
+    const { error: periodErr } = await supabase
+      .from('equipment_inactivity_periods')
+      .update({
+        reactivated_at: reactivatedAt,
+        reactivated_reading: reactivatedReadingNum,
+        reactivated_by: user?.id ?? null,
+      })
+      .eq('equipment_id', reactivateTarget.id)
+      .is('reactivated_at', null)
+    if (periodErr) {
+      setReactivateSaving(false)
+      setReactivateError('Erro ao registrar período de inatividade: ' + periodErr.message)
+      return
+    }
+
+    // 2) Reativa o equipamento limpando os campos "inactive_*"
+    const { error: eqErr } = await supabase.from('equipment')
+      .update({ active: true, inactive_reason: null, inactive_at: null, inactive_reading: null })
+      .eq('id', reactivateTarget.id)
+    if (eqErr) {
+      setReactivateSaving(false)
+      setReactivateError('Erro ao reativar equipamento: ' + eqErr.message)
+      return
+    }
+
+    setReactivateSaving(false)
+    setShowReactivateModal(false)
+    setReactivateTarget(null)
+    setReactivateDate('')
+    setReactivateReading('')
     loadData()
   }
 
@@ -962,6 +1033,62 @@ export default function EquipamentosPage() {
                 onClick={confirmDeactivate}
               >
                 Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reactivate Modal */}
+      {showReactivateModal && reactivateTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h3 className="font-semibold text-lg">Reativar Equipamento</h3>
+              <button onClick={() => setShowReactivateModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-sm text-gray-600">
+                Reativando <strong>{reactivateTarget.code}</strong>
+                {reactivateTarget.inactive_at && (
+                  <> · inativo desde {formatDate(reactivateTarget.inactive_at)}</>
+                )}
+              </p>
+              <div>
+                <label className="label">Data do retorno *</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={reactivateDate}
+                  max={new Date().toISOString().slice(0, 10)}
+                  onChange={e => setReactivateDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="label">Horímetro no retorno <span className="text-gray-400 font-normal">(opcional)</span></label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min={0}
+                  className="input"
+                  placeholder="Ex: 1250"
+                  value={reactivateReading}
+                  onChange={e => setReactivateReading(e.target.value)}
+                />
+                {reactivateTarget.inactive_reading !== null && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    Horímetro na desativação: <span className="font-mono">{reactivateTarget.inactive_reading.toLocaleString('pt-BR')}</span>
+                  </p>
+                )}
+              </div>
+              {reactivateError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{reactivateError}</p>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t flex gap-3 justify-end">
+              <button className="btn-secondary" onClick={() => setShowReactivateModal(false)} disabled={reactivateSaving}>Cancelar</button>
+              <button className="btn-primary" onClick={confirmReactivate} disabled={reactivateSaving || !reactivateDate}>
+                {reactivateSaving ? 'Reativando...' : 'Confirmar Reativação'}
               </button>
             </div>
           </div>
