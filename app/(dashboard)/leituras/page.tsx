@@ -183,9 +183,24 @@ export default function LeiturasPage() {
       updateRow(row.equipment.id, { error: 'Valor inválido' })
       return
     }
-    if (row.lastReading && val < row.lastReading.reading_value && row.equipment.equipment_models?.tracking_type !== 'km') {
-      updateRow(row.equipment.id, { error: `Valor menor que a última leitura (${row.lastReading.reading_value})` })
-      return
+    // Validação de monotonia para horímetro (KM pode ser substituído):
+    //  - Se a data informada é a mesma ou posterior à última leitura,
+    //    o valor não pode ser menor (horímetro só sobe com o tempo).
+    //  - Se a data é anterior (lançamento retroativo), o valor não pode
+    //    ser maior que a última leitura conhecida.
+    if (row.lastReading && row.equipment.equipment_models?.tracking_type !== 'km') {
+      if (date >= row.lastReading.reading_date && val < row.lastReading.reading_value) {
+        updateRow(row.equipment.id, {
+          error: `Valor menor que a leitura de ${formatDate(row.lastReading.reading_date)} (${row.lastReading.reading_value}h). Use uma data anterior para registrar leitura retroativa.`,
+        })
+        return
+      }
+      if (date < row.lastReading.reading_date && val > row.lastReading.reading_value) {
+        updateRow(row.equipment.id, {
+          error: `Valor maior que a leitura de ${formatDate(row.lastReading.reading_date)} (${row.lastReading.reading_value}h). Horímetro não pode diminuir com o tempo.`,
+        })
+        return
+      }
     }
 
     setSaving(row.equipment.id)
