@@ -203,6 +203,7 @@ export default function LeiturasPage() {
     }
 
     let error
+    let insertedId: string | null = null
     if (row.todayReading) {
       const res = await supabase
         .from('readings')
@@ -210,8 +211,9 @@ export default function LeiturasPage() {
         .eq('id', row.todayReading.id)
       error = res.error
     } else {
-      const res = await supabase.from('readings').insert(payload)
+      const res = await supabase.from('readings').insert(payload).select('id').single()
       error = res.error
+      insertedId = res.data?.id ?? null
     }
 
     if (error) {
@@ -219,7 +221,7 @@ export default function LeiturasPage() {
     } else {
       updateRow(row.equipment.id, {
         saved: true,
-        todayReading: { ...payload, id: row.todayReading?.id ?? '', created_at: new Date().toISOString() } as Reading,
+        todayReading: { ...payload, id: row.todayReading?.id ?? insertedId ?? '', created_at: new Date().toISOString() } as Reading,
       })
     }
     setSaving(null)
