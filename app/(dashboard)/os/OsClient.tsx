@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { WorkOrder, WorkOrderStatus } from '@/lib/types'
 import { formatDate } from '@/lib/utils'
 import ListTotal from '@/components/ListTotal'
-import { Plus, X, Loader2, ClipboardList, Search, ExternalLink } from 'lucide-react'
+import { Plus, X, Loader2, ClipboardList, Search, ExternalLink, Pencil } from 'lucide-react'
 
 const STATUS_LABELS: Record<WorkOrderStatus, string> = {
   criada: 'Criada',
@@ -51,6 +51,14 @@ export default function OsClient({
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('')
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
+
+  // Modal de edição de OS já existente (notes + description)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editTarget, setEditTarget] = useState<WorkOrder | null>(null)
+  const [editNotes, setEditNotes] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState('')
 
   // Create form state
   const [type, setType] = useState<'preventive' | 'corrective'>('preventive')
@@ -161,6 +169,36 @@ export default function OsClient({
 
     setShowModal(false)
     router.push(`/os/${data.id}`)
+    router.refresh()
+  }
+
+  function openEdit(o: WorkOrder) {
+    setEditTarget(o)
+    setEditNotes(o.notes ?? '')
+    setEditDescription(o.description ?? '')
+    setEditError('')
+    setShowEditModal(true)
+  }
+
+  async function confirmEdit() {
+    if (!editTarget) return
+    setEditSaving(true); setEditError('')
+    const supabase = createClient()
+    const payload: { notes: string | null; description?: string | null } = {
+      notes: editNotes.trim() || null,
+    }
+    if (editTarget.type === 'corrective') payload.description = editDescription.trim() || null
+
+    const { error: err } = await supabase
+      .from('work_orders')
+      .update(payload)
+      .eq('id', editTarget.id)
+
+    if (err) { setEditSaving(false); setEditError('Erro ao salvar: ' + err.message); return }
+
+    setEditSaving(false)
+    setShowEditModal(false)
+    setEditTarget(null)
     router.refresh()
   }
 
@@ -277,12 +315,24 @@ export default function OsClient({
                     {formatDate(o.opened_at)}
                   </td>
                   <td className="table-cell">
-                    <Link
-                      href={`/os/${o.id}`}
-                      className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm font-medium"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      {canWrite && (
+                        <button
+                          onClick={() => openEdit(o)}
+                          className="text-gray-400 hover:text-blue-600"
+                          title="Editar observações"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      )}
+                      <Link
+                        href={`/os/${o.id}`}
+                        className="text-blue-600 hover:text-blue-800"
+                        title="Abrir detalhe"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               )
@@ -415,6 +465,53 @@ export default function OsClient({
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                 Abrir OS
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar OS (notes + description) */}
+      {showEditModal && editTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <div>
+                <h2 className="font-semibold">Editar OS {editTarget.number}</h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {editTarget.type === 'preventive' ? 'Preventiva' : 'Corretiva'} · status: {STATUS_LABELS[editTarget.status] ?? editTarget.status}
+                </p>
+              </div>
+              <button onClick={() => setShowEditModal(false)}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              {editTarget.type === 'corrective' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Descrição do problema</label>
+                  <textarea
+                    className="input w-full h-20 resize-none"
+                    value={editDescription}
+                    onChange={e => setEditDescription(e.target.value)}
+                    placeholder="Descreva o problema/serviço a ser feito"
+                  />
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
+                <textarea
+                  className="input w-full h-24 resize-none"
+                  value={editNotes}
+                  onChange={e => setEditNotes(e.target.value)}
+                  placeholder="Comentários, observações técnicas, etc."
+                />
+              </div>
+              {editError && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{editError}</p>}
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end gap-3">
+              <button onClick={() => setShowEditModal(false)} className="btn-secondary" disabled={editSaving}>Cancelar</button>
+              <button onClick={confirmEdit} disabled={editSaving} className="btn-primary">
+                {editSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Salvar
               </button>
             </div>
           </div>
