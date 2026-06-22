@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { WorkOrder, WorkOrderStatus } from '@/lib/types'
 import { formatDate } from '@/lib/utils'
 import ListTotal from '@/components/ListTotal'
-import { Plus, X, Loader2, ClipboardList, Search, ExternalLink, Pencil } from 'lucide-react'
+import { Plus, X, Loader2, ClipboardList, Search, ExternalLink, Pencil, MapPin } from 'lucide-react'
 
 const STATUS_LABELS: Record<WorkOrderStatus, string> = {
   criada: 'Criada',
@@ -297,8 +297,15 @@ export default function OsClient({
                     </span>
                   </td>
                   <td className="table-cell">
-                    <p className="font-semibold text-gray-900">{eq?.code}</p>
-                    <p className="text-xs text-gray-500 truncate max-w-[160px]">{eq?.name}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-gray-900">{eq?.code}</p>
+                      {eq?.branches?.name && (
+                        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">
+                          <MapPin className="w-3 h-3" />{eq.branches.name}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 truncate max-w-[200px]">{eq?.name}</p>
                   </td>
                   <td className="table-cell text-sm text-gray-600">
                     {o.type === 'preventive'
