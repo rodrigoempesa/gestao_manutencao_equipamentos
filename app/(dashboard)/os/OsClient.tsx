@@ -258,9 +258,78 @@ export default function OsClient({
         </div>
       </div>
 
-      {/* Lista */}
-      <div className="card p-0 overflow-hidden">
-        <table className="w-full">
+      {/* Listas: Em andamento + Finalizadas/Canceladas */}
+      {(() => {
+        const TERMINAL = ['servico_finalizado', 'cancelada']
+        const activeFiltered = filtered.filter(o => !TERMINAL.includes(o.status))
+        const terminalFiltered = filtered.filter(o => TERMINAL.includes(o.status))
+
+        const renderRow = (o: WorkOrder) => {
+          const eq = o.equipment as any
+          return (
+            <tr key={o.id} className="hover:bg-gray-50 transition-colors">
+              <td className="table-cell">
+                <span className="font-mono font-semibold text-gray-900">{o.number}</span>
+              </td>
+              <td className="table-cell">
+                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                  o.type === 'preventive'
+                    ? 'bg-blue-50 text-blue-700'
+                    : 'bg-orange-50 text-orange-700'
+                }`}>
+                  {o.type === 'preventive' ? 'Preventiva' : 'Corretiva'}
+                </span>
+              </td>
+              <td className="table-cell">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-semibold text-gray-900">{eq?.code}</p>
+                  {eq?.branches?.name && (
+                    <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">
+                      <MapPin className="w-3 h-3" />{eq.branches.name}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 truncate max-w-[200px]">{eq?.name}</p>
+              </td>
+              <td className="table-cell text-sm text-gray-600">
+                {o.type === 'preventive'
+                  ? (o.maintenance_plans as any)?.name ?? '-'
+                  : <span className="italic truncate max-w-[180px] block">{o.description}</span>
+                }
+              </td>
+              <td className="table-cell">
+                <span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLORS[o.status]}`}>
+                  {STATUS_LABELS[o.status]}
+                </span>
+              </td>
+              <td className="table-cell text-sm text-gray-500">
+                {formatDate(o.opened_at)}
+              </td>
+              <td className="table-cell">
+                <div className="flex items-center gap-2">
+                  {canWrite && (
+                    <button
+                      onClick={() => openEdit(o)}
+                      className="text-gray-400 hover:text-blue-600"
+                      title="Editar observações"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                  )}
+                  <Link
+                    href={`/os/${o.id}`}
+                    className="text-blue-600 hover:text-blue-800"
+                    title="Abrir detalhe"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </Link>
+                </div>
+              </td>
+            </tr>
+          )
+        }
+
+        const TableHead = (
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
               <th className="table-header">Número</th>
@@ -272,88 +341,51 @@ export default function OsClient({
               <th className="table-header w-16"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="table-cell text-center text-gray-400 py-12">
-                  <ClipboardList className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-                  Nenhuma OS encontrada
-                </td>
-              </tr>
-            ) : filtered.map(o => {
-              const eq = o.equipment as any
-              return (
-                <tr key={o.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="table-cell">
-                    <span className="font-mono font-semibold text-gray-900">{o.number}</span>
-                  </td>
-                  <td className="table-cell">
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                      o.type === 'preventive'
-                        ? 'bg-blue-50 text-blue-700'
-                        : 'bg-orange-50 text-orange-700'
-                    }`}>
-                      {o.type === 'preventive' ? 'Preventiva' : 'Corretiva'}
-                    </span>
-                  </td>
-                  <td className="table-cell">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-gray-900">{eq?.code}</p>
-                      {eq?.branches?.name && (
-                        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">
-                          <MapPin className="w-3 h-3" />{eq.branches.name}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-500 truncate max-w-[200px]">{eq?.name}</p>
-                  </td>
-                  <td className="table-cell text-sm text-gray-600">
-                    {o.type === 'preventive'
-                      ? (o.maintenance_plans as any)?.name ?? '-'
-                      : <span className="italic truncate max-w-[180px] block">{o.description}</span>
-                    }
-                  </td>
-                  <td className="table-cell">
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLORS[o.status]}`}>
-                      {STATUS_LABELS[o.status]}
-                    </span>
-                  </td>
-                  <td className="table-cell text-sm text-gray-500">
-                    {formatDate(o.opened_at)}
-                  </td>
-                  <td className="table-cell">
-                    <div className="flex items-center gap-2">
-                      {canWrite && (
-                        <button
-                          onClick={() => openEdit(o)}
-                          className="text-gray-400 hover:text-blue-600"
-                          title="Editar observações"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                      )}
-                      <Link
-                        href={`/os/${o.id}`}
-                        className="text-blue-600 hover:text-blue-800"
-                        title="Abrir detalhe"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </Link>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-        <ListTotal
-          count={filtered.length}
-          total={orders.length}
-          singular="OS"
-          plural="OS"
-          className="px-5 py-3 border-t border-gray-100 bg-gray-50 text-right"
-        />
-      </div>
+        )
+
+        const emptyRow = (msg: string) => (
+          <tr>
+            <td colSpan={7} className="table-cell text-center text-gray-400 py-12">
+              <ClipboardList className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+              {msg}
+            </td>
+          </tr>
+        )
+
+        return (
+          <div className="space-y-6">
+            <div className="card p-0 overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/60">
+                <h3 className="font-semibold text-gray-700 text-sm">Em andamento</h3>
+                <span className="text-xs text-gray-500">{activeFiltered.length} {activeFiltered.length === 1 ? 'OS' : 'OS'}</span>
+              </div>
+              <table className="w-full">
+                {TableHead}
+                <tbody className="divide-y divide-gray-100">
+                  {activeFiltered.length === 0
+                    ? emptyRow('Nenhuma OS em andamento')
+                    : activeFiltered.map(renderRow)}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="card p-0 overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/60">
+                <h3 className="font-semibold text-gray-700 text-sm">Finalizadas e canceladas</h3>
+                <span className="text-xs text-gray-500">{terminalFiltered.length} {terminalFiltered.length === 1 ? 'OS' : 'OS'}</span>
+              </div>
+              <table className="w-full">
+                {TableHead}
+                <tbody className="divide-y divide-gray-100">
+                  {terminalFiltered.length === 0
+                    ? emptyRow('Nenhuma OS finalizada ou cancelada')
+                    : terminalFiltered.map(renderRow)}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Modal Nova OS */}
       {showModal && (
