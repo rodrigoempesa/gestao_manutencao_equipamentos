@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { WorkOrder, WorkOrderStatus } from '@/lib/types'
 import { formatDate } from '@/lib/utils'
 import ListTotal from '@/components/ListTotal'
-import { Plus, X, Loader2, ClipboardList, Search, ExternalLink, Pencil, MapPin } from 'lucide-react'
+import { Plus, X, Loader2, ClipboardList, Search, ExternalLink, Pencil, MapPin, ChevronDown, ChevronRight } from 'lucide-react'
 
 const STATUS_LABELS: Record<WorkOrderStatus, string> = {
   criada: 'Criada',
@@ -51,6 +51,7 @@ export default function OsClient({
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('')
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [terminalCollapsed, setTerminalCollapsed] = useState(true)
 
   // Modal de edição de OS já existente (notes + description)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -370,18 +371,29 @@ export default function OsClient({
             </div>
 
             <div className="card p-0 overflow-hidden">
-              <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/60">
-                <h3 className="font-semibold text-gray-700 text-sm">Finalizadas e canceladas</h3>
-                <span className="text-xs text-gray-500">{terminalFiltered.length} {terminalFiltered.length === 1 ? 'OS' : 'OS'}</span>
-              </div>
-              <table className="w-full">
-                {TableHead}
-                <tbody className="divide-y divide-gray-100">
-                  {terminalFiltered.length === 0
-                    ? emptyRow('Nenhuma OS finalizada ou cancelada')
-                    : terminalFiltered.map(renderRow)}
-                </tbody>
-              </table>
+              <button
+                type="button"
+                onClick={() => setTerminalCollapsed(v => !v)}
+                className={`w-full px-5 py-3 flex items-center justify-between bg-gray-50/60 hover:bg-gray-100 transition-colors ${terminalCollapsed ? '' : 'border-b border-gray-100'}`}
+              >
+                <div className="flex items-center gap-2">
+                  {terminalCollapsed
+                    ? <ChevronRight className="w-4 h-4 text-gray-400" />
+                    : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                  <h3 className="font-semibold text-gray-700 text-sm">Finalizadas e canceladas</h3>
+                </div>
+                <span className="text-xs text-gray-500">{terminalFiltered.length} OS</span>
+              </button>
+              {!terminalCollapsed && (
+                <table className="w-full">
+                  {TableHead}
+                  <tbody className="divide-y divide-gray-100">
+                    {terminalFiltered.length === 0
+                      ? emptyRow('Nenhuma OS finalizada ou cancelada')
+                      : terminalFiltered.map(renderRow)}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         )
