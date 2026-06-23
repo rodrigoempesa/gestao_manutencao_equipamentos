@@ -594,15 +594,26 @@ export default function OsDetailClient({
         <div className="card space-y-3">
           <h2 className="section-title flex items-center gap-2">
             <Tag className="w-4 h-4 text-gray-400" />
-            {os.type === 'preventive' ? 'Plano' : 'Problema'}
+            {plan?.name && os.description
+              ? 'Plano / Problema'
+              : plan?.name
+                ? 'Plano'
+                : 'Problema'}
           </h2>
-          {os.type === 'preventive' ? (
-            <>
-              <p className="font-semibold text-gray-900 text-sm">{plan?.name ?? '-'}</p>
-              <p className="text-xs text-gray-500">A cada {plan?.interval_value}h</p>
-            </>
-          ) : (
-            <p className="text-sm text-gray-700">{os.description}</p>
+          {plan?.name && (
+            <div>
+              <p className="font-semibold text-gray-900 text-sm">{plan.name}</p>
+              {plan.interval_value && <p className="text-xs text-gray-500">A cada {plan.interval_value}h</p>}
+            </div>
+          )}
+          {os.description && (
+            <div className={plan?.name ? 'pt-2 border-t border-gray-100' : ''}>
+              {plan?.name && <p className="text-xs text-gray-400 uppercase font-medium mb-1">Descrição do problema</p>}
+              <p className="text-sm text-gray-700">{os.description}</p>
+            </div>
+          )}
+          {!plan?.name && !os.description && (
+            <p className="text-sm text-gray-400">-</p>
           )}
           {os.notes && (
             <div className="pt-2 border-t border-gray-100">

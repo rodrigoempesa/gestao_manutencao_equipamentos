@@ -293,10 +293,17 @@ export default function OsClient({
                 <p className="text-xs text-gray-500 truncate max-w-[200px]">{eq?.name}</p>
               </td>
               <td className="table-cell text-sm text-gray-600">
-                {o.type === 'preventive'
-                  ? (o.maintenance_plans as any)?.name ?? '-'
-                  : <span className="italic truncate max-w-[180px] block">{o.description}</span>
-                }
+                {(() => {
+                  const planName = (o.maintenance_plans as any)?.name
+                  const desc = o.description
+                  if (!planName && !desc) return '-'
+                  return (
+                    <div className="space-y-0.5">
+                      {planName && <p className="truncate max-w-[200px]">{planName}</p>}
+                      {desc && <p className="italic text-xs text-gray-500 truncate max-w-[200px]">{desc}</p>}
+                    </div>
+                  )
+                })()}
               </td>
               <td className="table-cell">
                 <span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLORS[o.status]}`}>
