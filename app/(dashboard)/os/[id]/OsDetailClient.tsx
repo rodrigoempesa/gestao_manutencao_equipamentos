@@ -479,13 +479,13 @@ export default function OsDetailClient({
     <div className="space-y-6 max-w-4xl">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <Link href="/os" className="text-gray-400 hover:text-gray-600">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link href="/os" className="text-gray-400 hover:text-gray-600 flex-shrink-0">
             <ArrowLeft className="w-5 h-5" />
           </Link>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold text-gray-900 font-mono">{os.number}</h1>
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold text-gray-900 font-mono">{os.number}</h1>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
               <span className={`text-xs px-2.5 py-1 rounded-full font-medium border ${STATUS_COLORS[os.status]}`}>
                 {STATUS_LABELS[os.status] ?? os.status}
               </span>
