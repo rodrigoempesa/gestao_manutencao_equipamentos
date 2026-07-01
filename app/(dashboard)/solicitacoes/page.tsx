@@ -117,7 +117,9 @@ export default function SolicitacoesPage() {
       supabase.from('purchase_requests')
         .select(`*, equipment:equipment_id(id,code,name,branches(name)), maintenance_plans:plan_id(id,name,interval_value,equipment_models(tracking_type)), purchase_request_items(*, products(id,code,name,unit,unit_price))`)
         .order('created_at', { ascending: false }),
-      supabase.from('equipment').select('*, equipment_models(*, brands(*)), branches(*)').eq('active', true).order('code'),
+      // Inclui inativos: pode-se comprar material para equipamento inativo
+      // (justamente porque está em manutenção). Marcamos com "(inativo)" na UI.
+      supabase.from('equipment').select('*, equipment_models(*, brands(*)), branches(*)').order('code'),
       supabase.from('maintenance_plans').select('*, equipment_models(tracking_type)').order('interval_value'),
       supabase.from('maintenance_plan_items').select('*, products(id,code,name,unit,unit_price)').order('order_index'),
       supabase.from('products').select('id,code,name,unit,unit_price').eq('active', true).order('name'),
@@ -826,7 +828,7 @@ export default function SolicitacoesPage() {
                   <option value="">Selecione o equipamento...</option>
                   {equipment.map(eq => (
                     <option key={eq.id} value={eq.id}>
-                      {eq.code} — {eq.name} ({(eq as any).branches?.name ?? ''})
+                      {eq.code} — {eq.name} ({(eq as any).branches?.name ?? ''}){!eq.active ? ' — INATIVO' : ''}
                     </option>
                   ))}
                 </select>
