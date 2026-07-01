@@ -171,6 +171,7 @@ export default function OsDetailClient({
   const newServiceDraft = (): DraftService => ({ _key: Math.random().toString(36).slice(2), service_id: '', quantity: '1', unit_price: '' })
   const [showServicesModal, setShowServicesModal] = useState(false)
   const [draftServices, setDraftServices] = useState<DraftService[]>([newServiceDraft()])
+  const [draftServicesDiscount, setDraftServicesDiscount] = useState('')
   const [servicesSaving, setServicesSaving] = useState(false)
   const [servicesError, setServicesError] = useState('')
   const [deletingServiceId, setDeletingServiceId] = useState<string | null>(null)
@@ -552,27 +553,50 @@ export default function OsDetailClient({
 
   function openServicesModal() {
     setDraftServices([newServiceDraft()])
+    setDraftServicesDiscount('')
     setServicesError('')
     setShowServicesModal(true)
+  }
+
+  function parseBRLnumber(s: string): number {
+    if (!s) return NaN
+    const raw = s.replace(/\./g, '').replace(',', '.')
+    return parseFloat(raw)
   }
 
   async function handleAddServices() {
     const valid = draftServices.filter(d => d.service_id && parseFloat(d.quantity) > 0)
     if (valid.length === 0) { setServicesError('Adicione pelo menos um serviço com quantidade.'); return }
 
+    // Preços por item (ajustável) — fallback pro preço do catálogo se em branco
+    const linePrices = valid.map(d => {
+      const priceRaw = parseFloat(d.unit_price)
+      const svc = services.find(s => s.id === d.service_id)!
+      return isNaN(priceRaw) ? svc.unit_price : priceRaw
+    })
+    const lineQtys = valid.map(d => parseFloat(d.quantity))
+
+    const subtotal = valid.reduce((s, _, i) => s + lineQtys[i] * linePrices[i], 0)
+    const discountRaw = parseBRLnumber(draftServicesDiscount)
+    const discount = isNaN(discountRaw) || discountRaw < 0 ? 0 : discountRaw
+    if (discount > subtotal) { setServicesError('Desconto maior que o subtotal.'); return }
+    // Distribui o desconto proporcionalmente ao valor de cada linha,
+    // preservando o total final. Se subtotal for zero, mantém preço zero.
+    const factor = subtotal > 0 ? (subtotal - discount) / subtotal : 1
+
     setServicesSaving(true); setServicesError('')
     const supabase = createClient()
 
-    const payloads = valid.map(d => {
+    const payloads = valid.map((d, i) => {
       const svc = services.find(s => s.id === d.service_id)!
-      const priceRaw = parseFloat(d.unit_price)
+      const adjustedPrice = Math.round(linePrices[i] * factor * 100) / 100
       return {
         work_order_id: os.id,
         service_id: d.service_id,
         description: svc.name,
-        quantity: parseFloat(d.quantity),
+        quantity: lineQtys[i],
         unit: svc.unit,
-        unit_price: isNaN(priceRaw) ? svc.unit_price : priceRaw,
+        unit_price: adjustedPrice,
       }
     })
 
@@ -586,6 +610,7 @@ export default function OsDetailClient({
     setServicesSaving(false)
     setShowServicesModal(false)
     setDraftServices([newServiceDraft()])
+    setDraftServicesDiscount('')
     router.refresh()
   }
 
@@ -1389,6 +1414,48 @@ export default function OsDetailClient({
               <p className="text-xs text-gray-400">
                 O preço unitário vem do catálogo mas pode ser ajustado por OS. Se for cobrado uma NF depois, você anexa PDF/JPG direto no item.
               </p>
+
+              {/* Subtotal / Desconto / Total final */}
+              {(() => {
+                const subtotalDraft = draftServices.reduce((s, d) => {
+                  const q = parseFloat(d.quantity)
+                  const svc = services.find(x => x.id === d.service_id)
+                  const priceRaw = parseFloat(d.unit_price)
+                  const price = isNaN(priceRaw) ? (svc?.unit_price ?? 0) : priceRaw
+                  if (!d.service_id || isNaN(q) || q <= 0) return s
+                  return s + q * price
+                }, 0)
+                const discRaw = parseBRLnumber(draftServicesDiscount)
+                const disc = isNaN(discRaw) || discRaw < 0 ? 0 : discRaw
+                const finalDraft = Math.max(0, subtotalDraft - disc)
+                return (
+                  <div className="border border-gray-200 rounded-xl p-3 space-y-2 bg-gray-50/60">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600">Subtotal</span>
+                      <span className="font-mono text-gray-700">{formatBRL(subtotalDraft)}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <label className="text-sm text-gray-700 font-medium">Desconto sobre o total</label>
+                        <p className="text-xs text-gray-400">Aplicado depois dos preços por linha.</p>
+                      </div>
+                      <div className="relative w-36 flex-shrink-0">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">R$</span>
+                        <input
+                          className="input pl-9 text-right font-mono"
+                          placeholder="0,00"
+                          value={draftServicesDiscount}
+                          onChange={e => setDraftServicesDiscount(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-gray-200 pt-2">
+                      <span className="text-sm font-semibold text-gray-700">Total final</span>
+                      <span className="text-lg font-bold font-mono text-green-700">{formatBRL(finalDraft)}</span>
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
             <div className="px-6 py-4 border-t flex justify-end gap-3">
               <button onClick={() => setShowServicesModal(false)} className="btn-secondary" disabled={servicesSaving}>Cancelar</button>
