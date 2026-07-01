@@ -25,7 +25,7 @@ interface FormState {
   active: boolean
 }
 
-const SERVICE_UNITS = ['h', 'un', 'diária', 'serviço', 'm', 'm²']
+const SERVICE_UNITS = ['h', 'km', 'un', 'diária', 'serviço', 'm', 'm²']
 
 const emptyForm = (): FormState => ({ id: '', name: '', description: '', unit: 'h', unit_price: '0', active: true })
 
