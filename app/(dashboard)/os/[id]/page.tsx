@@ -44,6 +44,8 @@ export default async function OsDetailPage({ params }: { params: { id: string } 
     { data: myProfile },
     { data: purchaseRequests = [] },
     { data: products = [] },
+    { data: services = [] },
+    { data: serviceItems = [] },
   ] = await Promise.all([
     userIds.length > 0
       ? supabase.from('profiles').select('id, name').in('id', userIds)
@@ -55,6 +57,12 @@ export default async function OsDetailPage({ params }: { params: { id: string } 
       .eq('work_order_id', params.id)
       .order('created_at', { ascending: true }),
     supabase.from('products').select('id, code, name, unit, unit_price').eq('active', true).order('name'),
+    supabase.from('services').select('id, name, unit, unit_price').eq('active', true).order('name'),
+    supabase
+      .from('work_order_service_items')
+      .select('*, services(id, name, unit, unit_price)')
+      .eq('work_order_id', params.id)
+      .order('created_at', { ascending: true }),
   ])
 
   // Solicitações de compra existentes, ainda não vinculadas a nenhuma OS,
@@ -80,6 +88,8 @@ export default async function OsDetailPage({ params }: { params: { id: string } 
       products={(products as any[]) ?? []}
       purchaseRequests={(purchaseRequests as any[]) ?? []}
       availableRequests={(availableRequests as any[]) ?? []}
+      services={(services as any[]) ?? []}
+      serviceItems={(serviceItems as any[]) ?? []}
     />
   )
 }

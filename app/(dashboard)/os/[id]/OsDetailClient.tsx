@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -11,6 +11,7 @@ import {
   ArrowLeft, Printer, CheckCircle, Play, XCircle,
   Loader2, X, Clock, Wrench, MapPin, Tag,
   ShoppingCart, Package, Plus, Trash2, ChevronDown, ChevronRight,
+  Paperclip, Eye, Upload,
 } from 'lucide-react'
 
 const STATUS_COLORS = {
@@ -91,6 +92,18 @@ function TimelineStep({
   )
 }
 
+interface ServiceCatalog { id: string; name: string; unit: string; unit_price: number }
+interface ServiceItem {
+  id: string
+  service_id: string | null
+  description: string
+  quantity: number
+  unit: string
+  unit_price: number
+  invoice_path: string | null
+  services?: ServiceCatalog
+}
+
 export default function OsDetailClient({
   os,
   profileMap,
@@ -99,6 +112,8 @@ export default function OsDetailClient({
   products,
   purchaseRequests,
   availableRequests,
+  services,
+  serviceItems,
 }: {
   os: WorkOrder
   profileMap: Record<string, string>
@@ -107,6 +122,8 @@ export default function OsDetailClient({
   products: Product[]
   purchaseRequests: PurchaseRequest[]
   availableRequests: PurchaseRequest[]
+  services: ServiceCatalog[]
+  serviceItems: ServiceItem[]
 }) {
   const router = useRouter()
   const eq = os.equipment as any
@@ -148,6 +165,77 @@ export default function OsDetailClient({
   const [materialError, setMaterialError] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [expandedReqs, setExpandedReqs] = useState<Record<string, boolean>>({})
+
+  // Modal de adicionar serviços à OS
+  interface DraftService { _key: string; service_id: string; quantity: string; unit_price: string }
+  const newServiceDraft = (): DraftService => ({ _key: Math.random().toString(36).slice(2), service_id: '', quantity: '1', unit_price: '' })
+  const [showServicesModal, setShowServicesModal] = useState(false)
+  const [draftServices, setDraftServices] = useState<DraftService[]>([newServiceDraft()])
+  const [servicesSaving, setServicesSaving] = useState(false)
+  const [servicesError, setServicesError] = useState('')
+  const [deletingServiceId, setDeletingServiceId] = useState<string | null>(null)
+
+  const servicesTotal = serviceItems.reduce((s, it) => s + it.quantity * it.unit_price, 0)
+
+  // Upload / URL assinada da NF do serviço
+  const [signedServiceUrls, setSignedServiceUrls] = useState<Record<string, string>>({})
+  const [uploadingServiceId, setUploadingServiceId] = useState<string | null>(null)
+  const [uploadTargetServiceId, setUploadTargetServiceId] = useState<string | null>(null)
+  const [serviceUploadError, setServiceUploadError] = useState<string | null>(null)
+  const serviceFileRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const supabase = createClient()
+    serviceItems.forEach(async (it) => {
+      if (!it.invoice_path || signedServiceUrls[it.id]) return
+      const { data } = await supabase.storage.from('invoices').createSignedUrl(it.invoice_path, 3600)
+      if (data?.signedUrl) {
+        setSignedServiceUrls(prev => ({ ...prev, [it.id]: data.signedUrl }))
+      }
+    })
+  }, [serviceItems]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function triggerServiceUpload(itemId: string) {
+    setUploadTargetServiceId(itemId)
+    setServiceUploadError(null)
+    serviceFileRef.current?.click()
+  }
+
+  async function handleServiceFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !uploadTargetServiceId) return
+    e.target.value = ''
+
+    const allowed = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png']
+    if (!allowed.includes(file.type)) {
+      setServiceUploadError('Formato inválido. Use PDF, JPEG ou PNG.')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setServiceUploadError('Arquivo muito grande. Máximo 10 MB.')
+      return
+    }
+
+    setUploadingServiceId(uploadTargetServiceId)
+    setServiceUploadError(null)
+    const ext = file.name.split('.').pop()
+    const path = `service-items/${uploadTargetServiceId}/nota_fiscal.${ext}`
+    const supabase = createClient()
+
+    const { error: upErr } = await supabase.storage.from('invoices').upload(path, file, { upsert: true })
+    if (upErr) { setServiceUploadError(upErr.message); setUploadingServiceId(null); return }
+
+    await supabase.from('work_order_service_items').update({ invoice_path: path }).eq('id', uploadTargetServiceId)
+
+    const { data: signed } = await supabase.storage.from('invoices').createSignedUrl(path, 3600)
+    if (signed?.signedUrl) {
+      setSignedServiceUrls(prev => ({ ...prev, [uploadTargetServiceId]: signed.signedUrl }))
+    }
+
+    setUploadingServiceId(null)
+    setUploadTargetServiceId(null)
+    router.refresh()
+  }
 
   // Itens do plano com produto vinculado (usados pelo botão "Gerar do plano")
   interface PlanProductItem {
@@ -305,8 +393,8 @@ export default function OsDetailClient({
     // Consome os materiais das solicitações vinculadas: cria os itens da
     // manutenção (o gatilho maintenance_record_item_stock baixa o estoque).
     // Só ocorre quando o registro de manutenção foi criado (perfis admin).
-    if (maintenanceRecordId && materialItems.length > 0) {
-      const itemPayloads = materialItems
+    if (maintenanceRecordId && (materialItems.length > 0 || serviceItems.length > 0)) {
+      const materialPayloads = materialItems
         .filter(it => it.product_id)
         .map(it => ({
           record_id: maintenanceRecordId,
@@ -316,6 +404,15 @@ export default function OsDetailClient({
           unit: it.unit ?? 'un',
           unit_price: it.unit_price ?? 0,
         }))
+      const servicePayloads = serviceItems.map(it => ({
+        record_id: maintenanceRecordId,
+        service_id: it.service_id,
+        description: it.description || it.services?.name || 'Serviço',
+        quantity: it.quantity,
+        unit: it.unit ?? 'un',
+        unit_price: it.unit_price ?? 0,
+      }))
+      const itemPayloads = [...materialPayloads, ...servicePayloads]
 
       if (itemPayloads.length > 0) {
         const { error: itemsErr } = await supabase.from('maintenance_record_items').insert(itemPayloads)
@@ -323,7 +420,7 @@ export default function OsDetailClient({
           // Desfaz o registro recém-criado para não deixar OS meio-finalizada
           await supabase.from('maintenance_records').delete().eq('id', maintenanceRecordId)
           setSaving(false)
-          setError('Erro ao baixar os materiais do estoque. A OS não foi finalizada.')
+          setError('Erro ao registrar itens da manutenção. A OS não foi finalizada.')
           return
         }
       }
@@ -450,6 +547,53 @@ export default function OsDetailClient({
     // Apenas desvincula da OS (não apaga a solicitação que foi criada à parte)
     await supabase.from('purchase_requests').update({ work_order_id: null }).eq('id', id)
     setDeletingId(null)
+    router.refresh()
+  }
+
+  function openServicesModal() {
+    setDraftServices([newServiceDraft()])
+    setServicesError('')
+    setShowServicesModal(true)
+  }
+
+  async function handleAddServices() {
+    const valid = draftServices.filter(d => d.service_id && parseFloat(d.quantity) > 0)
+    if (valid.length === 0) { setServicesError('Adicione pelo menos um serviço com quantidade.'); return }
+
+    setServicesSaving(true); setServicesError('')
+    const supabase = createClient()
+
+    const payloads = valid.map(d => {
+      const svc = services.find(s => s.id === d.service_id)!
+      const priceRaw = parseFloat(d.unit_price)
+      return {
+        work_order_id: os.id,
+        service_id: d.service_id,
+        description: svc.name,
+        quantity: parseFloat(d.quantity),
+        unit: svc.unit,
+        unit_price: isNaN(priceRaw) ? svc.unit_price : priceRaw,
+      }
+    })
+
+    const { error: err } = await supabase.from('work_order_service_items').insert(payloads)
+    if (err) {
+      setServicesSaving(false)
+      setServicesError('Erro ao salvar serviços: ' + err.message)
+      return
+    }
+
+    setServicesSaving(false)
+    setShowServicesModal(false)
+    setDraftServices([newServiceDraft()])
+    router.refresh()
+  }
+
+  async function handleDeleteServiceItem(id: string) {
+    setDeletingServiceId(id)
+    const supabase = createClient()
+    await supabase.from('work_order_service_items').delete().eq('id', id)
+    setDeletingServiceId(null)
     router.refresh()
   }
 
@@ -984,6 +1128,111 @@ export default function OsDetailClient({
         </div>
       )}
 
+      {/* Serviços (mão de obra, deslocamento, terceiros) */}
+      {(canEditMaterials || serviceItems.length > 0) && (
+        <div className="card p-0 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+            <h2 className="section-title flex items-center gap-2">
+              <Wrench className="w-4 h-4 text-gray-400" />
+              Serviços
+              {serviceItems.length > 0 && (
+                <span className="text-xs font-normal text-gray-400">
+                  ({serviceItems.length} {serviceItems.length === 1 ? 'item' : 'itens'})
+                </span>
+              )}
+            </h2>
+            {canEditMaterials && (
+              <button onClick={openServicesModal} className="btn-primary text-sm" disabled={services.length === 0}>
+                <Plus className="w-4 h-4" /> Adicionar
+              </button>
+            )}
+          </div>
+
+          {serviceItems.length === 0 ? (
+            <div className="px-6 py-8 text-center text-sm text-gray-400">
+              Nenhum serviço vinculado a esta OS.
+              {canEditMaterials && services.length > 0 && ' Clique em "Adicionar" para registrar mão de obra, deslocamento, terceiros, etc.'}
+              {canEditMaterials && services.length === 0 && ' Cadastre serviços no menu Serviços primeiro.'}
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {serviceItems.map(it => {
+                const url = signedServiceUrls[it.id]
+                const uploading = uploadingServiceId === it.id
+                return (
+                  <div key={it.id} className="px-6 py-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-800 truncate">{it.services?.name ?? it.description}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {it.quantity.toLocaleString('pt-BR')} {it.unit} × {formatBRL(it.unit_price)}
+                        <span className="mx-2">·</span>
+                        <span className="font-semibold text-gray-700">{formatBRL(it.quantity * it.unit_price)}</span>
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {it.invoice_path ? (
+                        <>
+                          {url ? (
+                            <a href={url} target="_blank" rel="noopener noreferrer" title="Ver NF" className="p-1 text-emerald-600 hover:text-emerald-800">
+                              <Eye className="w-4 h-4" />
+                            </a>
+                          ) : (
+                            <span className="p-1"><Loader2 className="w-4 h-4 animate-spin text-gray-300" /></span>
+                          )}
+                          {canEditMaterials && (
+                            <button onClick={() => triggerServiceUpload(it.id)} disabled={uploading} title="Substituir NF" className="p-1 text-gray-400 hover:text-blue-600 disabled:opacity-50">
+                              {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        canEditMaterials && (
+                          <button onClick={() => triggerServiceUpload(it.id)} disabled={uploading} title="Anexar NF" className="p-1 text-gray-400 hover:text-blue-600 disabled:opacity-50">
+                            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+                          </button>
+                        )
+                      )}
+                      {canEditMaterials && (
+                        <button
+                          onClick={() => handleDeleteServiceItem(it.id)}
+                          disabled={deletingServiceId === it.id}
+                          className="p-1 text-gray-400 hover:text-red-600 disabled:opacity-50"
+                          title="Remover"
+                        >
+                          {deletingServiceId === it.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {serviceItems.length > 0 && (
+            <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+              <span className="text-xs text-gray-400">
+                {os.status === 'servico_finalizado'
+                  ? 'Serviços registrados no fechamento da manutenção.'
+                  : 'Serão adicionados ao registro de manutenção ao finalizar o serviço.'}
+              </span>
+              <span className="text-sm font-bold font-mono text-green-700">{formatBRL(servicesTotal)}</span>
+            </div>
+          )}
+
+          {serviceUploadError && (
+            <p className="px-6 py-2 text-xs text-red-600 bg-red-50 border-t border-red-100">{serviceUploadError}</p>
+          )}
+          <input
+            ref={serviceFileRef}
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+            className="hidden"
+            onChange={handleServiceFileChange}
+          />
+        </div>
+      )}
+
       {/* Modal: Materiais */}
       {showMaterials && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -1052,6 +1301,99 @@ export default function OsDetailClient({
               <button onClick={closeMaterialsModal} className="btn-secondary" disabled={materialSaving}>Cancelar</button>
               <button onClick={handleCreateMaterials} disabled={materialSaving || products.length === 0} className="btn-primary">
                 {materialSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />} Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Adicionar serviços à OS */}
+      {showServicesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h2 className="font-semibold flex items-center gap-2">
+                <Wrench className="w-4 h-4 text-gray-400" /> Adicionar Serviços — {os.number}
+              </h2>
+              <button onClick={() => setShowServicesModal(false)}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-6 py-5 space-y-3">
+              {services.length === 0 && (
+                <p className="text-sm text-gray-500">Nenhum serviço ativo cadastrado. Cadastre em Serviços primeiro.</p>
+              )}
+              {draftServices.map((d, i) => {
+                const svc = services.find(s => s.id === d.service_id)
+                const priceHint = svc ? svc.unit_price : 0
+                return (
+                  <div key={d._key} className="flex items-end gap-2">
+                    <div className="flex-1 min-w-0">
+                      {i === 0 && <label className="label">Serviço</label>}
+                      <select
+                        className="input"
+                        value={d.service_id}
+                        onChange={e => {
+                          const newId = e.target.value
+                          const svcNew = services.find(s => s.id === newId)
+                          setDraftServices(prev => prev.map(x => x._key === d._key
+                            ? { ...x, service_id: newId, unit_price: svcNew ? String(svcNew.unit_price.toFixed(2)) : '' }
+                            : x))
+                        }}
+                      >
+                        <option value="">Selecione...</option>
+                        {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.unit})</option>)}
+                      </select>
+                    </div>
+                    <div className="w-24">
+                      {i === 0 && <label className="label">Qtd ({svc?.unit ?? 'un'})</label>}
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.001"
+                        className="input text-right font-mono"
+                        value={d.quantity}
+                        onChange={e => setDraftServices(prev => prev.map(x => x._key === d._key ? { ...x, quantity: e.target.value } : x))}
+                      />
+                    </div>
+                    <div className="w-28">
+                      {i === 0 && <label className="label">Vlr Unit.</label>}
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className="input text-right font-mono"
+                        placeholder={priceHint > 0 ? priceHint.toFixed(2) : '0,00'}
+                        value={d.unit_price}
+                        onChange={e => setDraftServices(prev => prev.map(x => x._key === d._key ? { ...x, unit_price: e.target.value } : x))}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDraftServices(prev => prev.length > 1 ? prev.filter(x => x._key !== d._key) : prev)}
+                      className="mb-1.5 p-2 text-gray-400 hover:text-red-600"
+                      title="Remover"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )
+              })}
+              <button
+                type="button"
+                onClick={() => setDraftServices(prev => [...prev, newServiceDraft()])}
+                className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                disabled={services.length === 0}
+              >
+                <Plus className="w-4 h-4" /> Adicionar linha
+              </button>
+              {servicesError && <p className="text-sm text-red-600">{servicesError}</p>}
+              <p className="text-xs text-gray-400">
+                O preço unitário vem do catálogo mas pode ser ajustado por OS. Se for cobrado uma NF depois, você anexa PDF/JPG direto no item.
+              </p>
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end gap-3">
+              <button onClick={() => setShowServicesModal(false)} className="btn-secondary" disabled={servicesSaving}>Cancelar</button>
+              <button onClick={handleAddServices} disabled={servicesSaving || services.length === 0} className="btn-primary">
+                {servicesSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />} Salvar
               </button>
             </div>
           </div>
