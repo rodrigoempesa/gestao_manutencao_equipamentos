@@ -1258,6 +1258,29 @@ export default function OsDetailClient({
         </div>
       )}
 
+      {/* Total gasto na OS (materiais + serviços) */}
+      {(materialItems.length > 0 || serviceItems.length > 0) && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="section-title flex items-center gap-2">
+              <Tag className="w-4 h-4 text-gray-400" />
+              Total gasto na OS
+            </h2>
+            <span className="text-xl font-bold font-mono text-green-700">{formatBRL(materialsPaid + servicesTotal)}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-sm border-t border-gray-100 pt-2">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500">Materiais</span>
+              <span className="font-mono text-gray-800">{formatBRL(materialsPaid)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500">Serviços</span>
+              <span className="font-mono text-gray-800">{formatBRL(servicesTotal)}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal: Materiais */}
       {showMaterials && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
