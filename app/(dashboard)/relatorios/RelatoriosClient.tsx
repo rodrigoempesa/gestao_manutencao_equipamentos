@@ -55,6 +55,35 @@ export default function RelatoriosClient({
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
+  // Modelos Sem Ciclo — edição inline do cycle_duration
+  const [cycleList, setCycleList] = useState<any[]>(noCycleModels)
+  const [cycleDraft, setCycleDraft] = useState<Record<string, string>>({})
+  const [cycleSavingId, setCycleSavingId] = useState<string | null>(null)
+  const [cycleError, setCycleError] = useState<Record<string, string>>({})
+
+  async function saveCycleDuration(modelId: string, valueStr: string) {
+    const value = parseInt(valueStr)
+    if (isNaN(value) || value <= 0) {
+      setCycleError(prev => ({ ...prev, [modelId]: 'Informe um valor válido.' }))
+      return
+    }
+    setCycleSavingId(modelId)
+    setCycleError(prev => { const n = { ...prev }; delete n[modelId]; return n })
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('equipment_models')
+      .update({ cycle_duration: value })
+      .eq('id', modelId)
+    setCycleSavingId(null)
+    if (error) {
+      setCycleError(prev => ({ ...prev, [modelId]: 'Erro: ' + error.message }))
+      return
+    }
+    // Remove da lista local
+    setCycleList(prev => prev.filter(m => m.id !== modelId))
+    setCycleDraft(prev => { const n = { ...prev }; delete n[modelId]; return n })
+  }
+
   const lateReadings = useMemo(() => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -579,7 +608,7 @@ export default function RelatoriosClient({
               onClick={() => downloadCsv(
                 'modelos-sem-ciclo.csv',
                 ['Marca', 'Modelo', 'Medição', 'Planos', 'Maior intervalo'],
-                noCycleModels.map(m => [
+                cycleList.map(m => [
                   m.brands?.name ?? '',
                   m.name,
                   m.tracking_type === 'hours' ? 'Horímetro (h)' : 'Odômetro (km)',
@@ -587,7 +616,7 @@ export default function RelatoriosClient({
                   m.max_interval != null ? String(m.max_interval) : '',
                 ]),
               )}
-              disabled={noCycleModels.length === 0}
+              disabled={cycleList.length === 0}
             >
               <Download className="w-4 h-4" /> Exportar CSV
             </button>
@@ -602,30 +631,62 @@ export default function RelatoriosClient({
                     <th className="table-header">Modelo</th>
                     <th className="table-header">Medição</th>
                     <th className="table-header text-right">Planos</th>
-                    <th className="table-header text-right">Maior intervalo (sugestão)</th>
+                    <th className="table-header text-right">Sugestão</th>
+                    <th className="table-header">Duração do ciclo</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {noCycleModels.length === 0 && (
+                  {cycleList.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="table-cell text-center text-gray-400 py-12">
+                      <td colSpan={6} className="table-cell text-center text-gray-400 py-12">
                         Todos os modelos com planos já têm ciclo definido. 👌
                       </td>
                     </tr>
                   )}
-                  {noCycleModels.map((m: any) => (
-                    <tr key={m.id} className="hover:bg-gray-50">
-                      <td className="table-cell text-gray-600">{m.brands?.name ?? '-'}</td>
-                      <td className="table-cell font-medium">{m.name}</td>
-                      <td className="table-cell text-gray-500">
-                        {m.tracking_type === 'hours' ? 'Horímetro (h)' : 'Odômetro (km)'}
-                      </td>
-                      <td className="table-cell text-right font-mono">{m.plans_count ?? 0}</td>
-                      <td className="table-cell text-right font-mono font-semibold">
-                        {m.max_interval != null ? `${m.max_interval.toLocaleString('pt-BR')} ${m.tracking_type === 'hours' ? 'h' : 'km'}` : '-'}
-                      </td>
-                    </tr>
-                  ))}
+                  {cycleList.map((m: any) => {
+                    const unitLabel = m.tracking_type === 'hours' ? 'h' : 'km'
+                    const draftValue = cycleDraft[m.id] ?? (m.max_interval != null ? String(m.max_interval) : '')
+                    const rowError = cycleError[m.id]
+                    const isSaving = cycleSavingId === m.id
+                    return (
+                      <tr key={m.id} className="hover:bg-gray-50">
+                        <td className="table-cell text-gray-600">{m.brands?.name ?? '-'}</td>
+                        <td className="table-cell font-medium">{m.name}</td>
+                        <td className="table-cell text-gray-500">
+                          {m.tracking_type === 'hours' ? 'Horímetro (h)' : 'Odômetro (km)'}
+                        </td>
+                        <td className="table-cell text-right font-mono">{m.plans_count ?? 0}</td>
+                        <td className="table-cell text-right font-mono text-gray-500">
+                          {m.max_interval != null ? `${m.max_interval.toLocaleString('pt-BR')} ${unitLabel}` : '-'}
+                        </td>
+                        <td className="table-cell">
+                          <div className="flex items-center gap-2">
+                            <div className="relative w-28">
+                              <input
+                                type="number"
+                                min={1}
+                                step={1}
+                                className={`input pr-8 py-1 text-right font-mono text-sm ${rowError ? 'border-red-300' : ''}`}
+                                value={draftValue}
+                                onChange={e => setCycleDraft(prev => ({ ...prev, [m.id]: e.target.value }))}
+                                disabled={isSaving}
+                              />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">{unitLabel}</span>
+                            </div>
+                            <button
+                              className="btn-primary py-1 px-3 text-xs"
+                              onClick={() => saveCycleDuration(m.id, draftValue)}
+                              disabled={isSaving || !draftValue}
+                              title="Salvar duração do ciclo"
+                            >
+                              {isSaving ? '...' : <><Check className="w-3.5 h-3.5" /> Salvar</>}
+                            </button>
+                          </div>
+                          {rowError && <p className="text-xs text-red-600 mt-1">{rowError}</p>}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
