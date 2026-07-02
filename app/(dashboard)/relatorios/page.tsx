@@ -43,17 +43,26 @@ export default async function RelatoriosPage() {
 
   const { data: noInitialList } = await noInitialQuery
 
-  // Models without plans (admin_geral only)
+  // Models without plans + models without cycle_duration (admin_geral only)
   let noPlansModels: any[] = []
+  let noCycleModels: any[] = []
   if (isAdminGeral) {
     const { data: models } = await supabase
       .from('equipment_models')
-      .select('id, name, brands(name), maintenance_plans(id)')
+      .select('id, name, tracking_type, cycle_duration, brands(name), maintenance_plans(id, name, interval_value)')
       .order('name')
 
     noPlansModels = (models ?? []).filter(
       (m: any) => !m.maintenance_plans || m.maintenance_plans.length === 0
     )
+
+    noCycleModels = (models ?? [])
+      .filter((m: any) => m.cycle_duration == null && (m.maintenance_plans?.length ?? 0) > 0)
+      .map((m: any) => {
+        const plans = (m.maintenance_plans ?? []) as { id: string; name: string; interval_value: number }[]
+        const maxInterval = Math.max(...plans.map(p => p.interval_value))
+        return { ...m, plans_count: plans.length, max_interval: maxInterval }
+      })
   }
 
   return (
@@ -61,6 +70,7 @@ export default async function RelatoriosPage() {
       statusList={statusList ?? []}
       noInitialList={noInitialList ?? []}
       noPlansModels={noPlansModels}
+      noCycleModels={noCycleModels}
       isAdminGeral={isAdminGeral}
     />
   )

@@ -7,7 +7,7 @@ import { formatReading } from '@/lib/types'
 import { Download, Clock, Database, AlertTriangle, Pencil, X, Check, Loader2, EyeOff, Wrench, Printer } from 'lucide-react'
 
 type DaysFilter = 7 | 15 | 30
-type Tab = 'status' | 'leituras' | 'horimetro' | 'planos'
+type Tab = 'status' | 'leituras' | 'horimetro' | 'planos' | 'ciclo'
 
 function downloadCsv(filename: string, headers: string[], rows: (string | null | undefined)[][]) {
   const lines = [headers, ...rows].map(r =>
@@ -35,11 +35,13 @@ export default function RelatoriosClient({
   statusList,
   noInitialList,
   noPlansModels,
+  noCycleModels,
   isAdminGeral,
 }: {
   statusList: any[]
   noInitialList: any[]
   noPlansModels: any[]
+  noCycleModels: any[]
   isAdminGeral: boolean
 }) {
   const [tab, setTab] = useState<Tab>('status')
@@ -134,7 +136,10 @@ export default function RelatoriosClient({
     { key: 'leituras' as Tab, label: 'Leituras Atrasadas', icon: Clock, count: null },
     { key: 'horimetro' as Tab, label: 'Sem Horímetro Inicial', icon: Database, count: visiblePending.length },
     ...(isAdminGeral
-      ? [{ key: 'planos' as Tab, label: 'Modelos Sem Planos', icon: AlertTriangle, count: noPlansModels.length }]
+      ? [
+          { key: 'planos' as Tab, label: 'Modelos Sem Planos', icon: AlertTriangle, count: noPlansModels.length },
+          { key: 'ciclo'  as Tab, label: 'Modelos Sem Ciclo',  icon: AlertTriangle, count: noCycleModels.length },
+        ]
       : []),
   ]
 
@@ -557,6 +562,78 @@ export default function RelatoriosClient({
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Modelos Sem Ciclo (cycle_duration nulo) */}
+      {tab === 'ciclo' && isAdminGeral && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <p className="text-sm text-gray-500">
+              Modelos que <strong>têm planos cadastrados</strong> mas estão sem <code className="text-xs bg-gray-100 px-1 rounded">cycle_duration</code>.
+              Sem esse campo, o dashboard não sabe voltar ao 1º plano depois da última revisão e mostra "Sem dados".
+              A sugestão pra preencher costuma ser o maior intervalo de plano do modelo.
+            </p>
+            <button
+              className="btn-secondary"
+              onClick={() => downloadCsv(
+                'modelos-sem-ciclo.csv',
+                ['Marca', 'Modelo', 'Medição', 'Planos', 'Maior intervalo'],
+                noCycleModels.map(m => [
+                  m.brands?.name ?? '',
+                  m.name,
+                  m.tracking_type === 'hours' ? 'Horímetro (h)' : 'Odômetro (km)',
+                  String(m.plans_count ?? 0),
+                  m.max_interval != null ? String(m.max_interval) : '',
+                ]),
+              )}
+              disabled={noCycleModels.length === 0}
+            >
+              <Download className="w-4 h-4" /> Exportar CSV
+            </button>
+          </div>
+
+          <div className="card p-0 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="table-header">Marca</th>
+                    <th className="table-header">Modelo</th>
+                    <th className="table-header">Medição</th>
+                    <th className="table-header text-right">Planos</th>
+                    <th className="table-header text-right">Maior intervalo (sugestão)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {noCycleModels.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="table-cell text-center text-gray-400 py-12">
+                        Todos os modelos com planos já têm ciclo definido. 👌
+                      </td>
+                    </tr>
+                  )}
+                  {noCycleModels.map((m: any) => (
+                    <tr key={m.id} className="hover:bg-gray-50">
+                      <td className="table-cell text-gray-600">{m.brands?.name ?? '-'}</td>
+                      <td className="table-cell font-medium">{m.name}</td>
+                      <td className="table-cell text-gray-500">
+                        {m.tracking_type === 'hours' ? 'Horímetro (h)' : 'Odômetro (km)'}
+                      </td>
+                      <td className="table-cell text-right font-mono">{m.plans_count ?? 0}</td>
+                      <td className="table-cell text-right font-mono font-semibold">
+                        {m.max_interval != null ? `${m.max_interval.toLocaleString('pt-BR')} ${m.tracking_type === 'hours' ? 'h' : 'km'}` : '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <p className="text-xs text-gray-400">
+            Pra corrigir: <strong>Planos de Manutenção</strong> → ícone de lápis no modelo → preencha <code className="text-[10px] bg-gray-100 px-1 rounded">Duração do ciclo</code> com o valor sugerido (ou outro que fizer sentido pro fabricante).
+          </p>
         </div>
       )}
     </div>
